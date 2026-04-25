@@ -125,6 +125,25 @@ All 20 tools are auto-registered into two toolsets — `music` (12 tools) and `e
 
 The "felt experience" format is a JSON blob with per-moment emotion samples, event flags (`attention_shift`, `emotional_peak`, `possible_chills`), summary statistics, **and a natural-language narrative** ready for the next prompt.
 
+## Bundled skill — `sonus-prompt-engineering`
+
+The plugin ships with a Hermes skill at `skills/sonus-prompt-engineering/` that any Hermes-compatible agent can load to use Sonus correctly on the **first try, no trial-and-error**:
+
+- Suno prompt engineering — Bark/Chirp manipulation, kaomoji/symbol hacks, non-standard parameters, exclude-styles tricks, weirdness/style balance
+- 1200-entry genre database for fusion inspiration (`references/genres.json`)
+- Music theory cheat sheet — sections, progressions, song forms (`references/music-theory.md`)
+- **Resonance feedback guide** (`references/resonance-feedback.md`) — how to read EEG valence/arousal/attention/engagement/chills and translate the felt experience back into the next prompt
+- Closed-loop composition workflow — generate → listen via EEG → measure → adapt prompt
+- Copy-paste templates for instrumental, vocal, and EEG-feedback flows (`templates/prompt-format.md`)
+
+Install it into your skills directory:
+
+```bash
+cp -r skills/sonus-prompt-engineering ~/.hermes/skills/
+```
+
+Hermes auto-discovers skills in that directory. Any agent (Claude, GPT, local) running on Hermes will load it on demand whenever it reaches for a `music_*`, `midi_*`, or `eeg_*` tool — turning Sonus into a one-shot music-and-resonance toolkit instead of a trial-and-error one.
+
 ## Dashboard backend (FastAPI)
 
 `hermes-sonus` ships its own `plugin_api.py` mounted at `/api/plugins/hermes-sonus/*` — 17 endpoints covering the full surface. The dashboard UI consumes these via `SDK.fetchJSON()`. Notable endpoints:
