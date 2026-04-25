@@ -1,0 +1,813 @@
+"""
+Hermes Music Plugin
+===================
+
+Music generation for Hermes Agent — Suno AI generation, MIDI composition,
+and music library management.
+
+Provides 12 tools in the "music" toolset:
+  - music_generate, music_status, music_result, music_list
+  - music_favorite, music_library, music_search, music_play
+  - music_stop, music_delete
+  - midi_create, music_compose
+
+Install: pip install hermes-music
+Config:  SUNO_API_KEY in ~/.hermes/.env
+"""
+
+__version__ = "1.0.0"
+
+import json
+import logging
+import os
+import subprocess
+import threading
+import time
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Lazy singleton for the task manager
+# ---------------------------------------------------------------------------
+
+_manager: Optional["tasks.MusicTaskManager"] = None
+
+
+def _get_data_dir() -> Path:
+    """Get the music plugin data directory, respecting Hermes profiles."""
+    try:
+        from hermes_constants import get_hermes_home
+        base = get_hermes_home()
+    except ImportError:
+        base = Path.home() / ".hermes"
+    return base / "sonus" / "music"
+
+
+def _get_manager():
+    """Get or create the singleton MusicTaskManager."""
+    global _manager
+    if _manager is None:
+        from .tasks import MusicTaskManager
+        _manager = MusicTaskManager(_get_data_dir())
+    return _manager
+
+
+# ---------------------------------------------------------------------------
+# Check function — tools only appear when SUNO_API_KEY is set
+# ---------------------------------------------------------------------------
+
+def _check_suno_available() -> bool:
+    return bool(os.environ.get("SUNO_API_KEY"))
+
+
+def _check_midi_available() -> bool:
+    """MIDI tools work without API key (local only), just need midiutil."""
+    try:
+        import midiutil  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _check_always() -> bool:
+    """Tools that always work (music_stop, etc.)."""
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Tool handlers — thin wrappers that return JSON strings
+# ---------------------------------------------------------------------------
+
+def _handle_music_generate(args: dict, **kw) -> str:
+    from .tasks import TaskStatus
+    manager = _get_manager()
+
+    prompt = args.get("prompt", "")
+    style = args.get("style", "")
+    title = args.get("title", "")
+    model = args.get("model", "V5")
+    is_instrumental = args.get("is_instrumental", True)
+    blocking = args.get("blocking", True)
+    agent_id = args.get("agent_id", "")
+
+    task = manager.create_task(
+        prompt=prompt,
+        style=style,
+        title=title,
+        model=model,
+        is_instrumental=is_instrumental,
+        agent_id=agent_id or None,
+    )
+
+    if blocking:
+        result = manager.run_task(task.task_id)
+        task = manager.get_task(task.task_id)
+        if result.get("success"):
+            return json.dumps({
+                "success": True,
+                "task_id": task.task_id,
+                "title": task.title,
+                "audio_file": task.audio_file,
+                "audio_url": task.audio_url,
+                "duration": task.duration,
+                "tracks": result.get("tracks", []),
+                "track_count": result.get("track_count", 1),
+                "message": f"Music generated: {task.title} ({task.duration:.0f}s) — {result.get('track_count', 1)} tracks",
+            })
+        else:
+            return json.dumps({
+                "success": False,
+                "task_id": task.task_id,
+                "error": result.get("error", "Generation failed"),
+            })
+    else:
+        # Async: run in background thread
+        thread = threading.Thread(target=manager.run_task, args=(task.task_id,), daemon=True)
+        thread.start()
+        return json.dumps({
+            "success": True,
+            "task_id": task.task_id,
+            "status": "generating",
+            "message": f"Generation started. Poll with music_status('{task.task_id}'). Takes 2-4 minutes.",
+        })
+
+
+def _handle_music_status(args: dict, **kw) -> str:
+    manager = _get_manager()
+    task_id = args.get("task_id", "")
+    task = manager.get_task(task_id)
+
+    if not task:
+        return json.dumps({"error": f"Task {task_id} not found"})
+
+    elapsed = ""
+    if task.started_at:
+        from datetime import datetime
+        try:
+            start = datetime.fromisoformat(task.started_at)
+            elapsed = f"{(datetime.now() - start).total_seconds():.0f}s"
+        except Exception:
+            pass
+
+    return json.dumps({
+        "task_id": task.task_id,
+        "status": task.status.value,
+        "progress": task.progress,
+        "title": task.title,
+        "elapsed": elapsed,
+        "model": task.model,
+        "track_count": task.track_count,
+    })
+
+
+def _handle_music_result(args: dict, **kw) -> str:
+    manager = _get_manager()
+    task_id = args.get("task_id", "")
+    task = manager.get_task(task_id)
+
+    if not task:
+        return json.dumps({"error": f"Task {task_id} not found"})
+
+    from .tasks import TaskStatus
+    if task.status != TaskStatus.COMPLETED:
+        return json.dumps({
+            "error": f"Task not completed yet. Status: {task.status.value}",
+            "progress": task.progress,
+        })
+
+    tracks = []
+    for i, t in enumerate(task.tracks, 1):
+        tracks.append({
+            "track": i,
+            "file": t.file,
+            "duration": t.duration,
+            "clip_id": t.clip_id,
+            "audio_url": t.audio_url,
+            "favorite": t.favorite,
+            "archived": t.archived,
+        })
+
+    return json.dumps({
+        "task_id": task.task_id,
+        "title": task.title,
+        "audio_file": task.audio_file,
+        "audio_url": task.audio_url,
+        "duration": task.duration,
+        "clip_id": task.clip_id,
+        "model": task.model,
+        "is_instrumental": task.is_instrumental,
+        "track_count": task.track_count,
+        "tracks": tracks,
+    })
+
+
+def _handle_music_list(args: dict, **kw) -> str:
+    manager = _get_manager()
+    limit = args.get("limit", 10)
+    tasks = manager.list_tasks(limit=limit)
+
+    return json.dumps({
+        "tasks": [
+            {
+                "task_id": t.task_id,
+                "title": t.title or "Untitled",
+                "status": t.status.value,
+                "model": t.model,
+                "duration": t.duration,
+                "audio_file": t.audio_file,
+                "agent_id": t.agent_id,
+                "track_count": t.track_count,
+                "created_at": t.created_at,
+            }
+            for t in tasks
+        ],
+        "count": len(tasks),
+        "total": len(manager.tasks),
+    })
+
+
+def _handle_music_favorite(args: dict, **kw) -> str:
+    from .library import toggle_favorite
+    manager = _get_manager()
+    return json.dumps(toggle_favorite(
+        manager,
+        task_id=args.get("task_id", ""),
+        track=args.get("track"),
+        favorite=args.get("favorite"),
+    ))
+
+
+def _handle_music_library(args: dict, **kw) -> str:
+    from .library import browse_library
+    manager = _get_manager()
+    return json.dumps(browse_library(
+        manager,
+        agent_id=args.get("agent_id"),
+        favorites_only=args.get("favorites_only", False),
+        status=args.get("status"),
+        limit=args.get("limit", 20),
+    ))
+
+
+def _handle_music_search(args: dict, **kw) -> str:
+    from .library import search_songs
+    manager = _get_manager()
+    return json.dumps(search_songs(
+        manager,
+        query=args.get("query", ""),
+        limit=args.get("limit", 10),
+    ))
+
+
+def _handle_music_play(args: dict, **kw) -> str:
+    from .library import play_song
+    manager = _get_manager()
+    return json.dumps(play_song(
+        manager,
+        task_id=args.get("task_id", ""),
+        track=args.get("track", 1),
+    ))
+
+
+def _handle_music_stop(args: dict, **kw) -> str:
+    from .player import stop_playback, is_playing
+    status = is_playing()
+    if not status.get("playing"):
+        return json.dumps({"success": True, "message": "Nothing is currently playing"})
+    result = stop_playback()
+    return json.dumps(result)
+
+
+def _handle_music_delete(args: dict, **kw) -> str:
+    manager = _get_manager()
+    task_id = args.get("task_id", "")
+    track = args.get("track")
+    permanent = args.get("permanent", False)
+
+    if not task_id:
+        return json.dumps({"success": False, "error": "task_id is required"})
+
+    if track is not None:
+        # Single track operation
+        if permanent:
+            result = manager.delete_track(task_id, track)
+        else:
+            result = manager.archive_track(task_id, track)
+    else:
+        # Whole task
+        if permanent:
+            result = manager.delete_task(task_id)
+        else:
+            result = manager.archive_task(task_id)
+
+    return json.dumps(result)
+
+
+def _handle_midi_create(args: dict, **kw) -> str:
+    from .midi import create_midi
+    manager = _get_manager()
+    return json.dumps(create_midi(
+        notes=args.get("notes", []),
+        tempo=args.get("tempo", 120),
+        note_duration=args.get("note_duration", 0.5),
+        title=args.get("title", "composition"),
+        velocity=args.get("velocity", 100),
+        rest_between=args.get("rest_between", 0.0),
+        output_dir=manager.midi_dir,
+    ))
+
+
+def _handle_music_compose(args: dict, **kw) -> str:
+    from . import suno
+    from .tasks import TaskStatus
+    manager = _get_manager()
+
+    midi_file = args.get("midi_file", "")
+    style = args.get("style", "")
+    title = args.get("title", "")
+    audio_influence = args.get("audio_influence", 0.5)
+    prompt = args.get("prompt", "")
+    instrumental = args.get("instrumental", True)
+    style_weight = args.get("style_weight", 0.5)
+    weirdness = args.get("weirdness", 0.3)
+    model = args.get("model", "V5")
+    blocking = args.get("blocking", True)
+    agent_id = args.get("agent_id", "")
+
+    midi_path = Path(midi_file)
+    if not midi_path.exists():
+        return json.dumps({"success": False, "error": f"MIDI file not found: {midi_file}"})
+
+    # Step 1: Convert MIDI to audio
+    temp_mp3 = str(manager.music_dir / f"_compose_ref_{int(time.time())}.mp3")
+    convert_result = _midi_to_audio(str(midi_path), temp_mp3)
+    if not convert_result.get("success"):
+        return json.dumps({"success": False, "error": f"MIDI conversion failed: {convert_result.get('error')}"})
+
+    # Step 2: Upload to Suno
+    upload_result = suno.upload_audio(convert_result["audio_path"])
+    _cleanup_file(temp_mp3)
+    if not upload_result.get("success"):
+        return json.dumps({"success": False, "error": f"Upload failed: {upload_result.get('error')}"})
+
+    # Step 3: Submit upload-cover
+    cover_result = suno.submit_upload_cover(
+        upload_url=upload_result["upload_url"],
+        style=style,
+        title=title,
+        prompt=prompt,
+        instrumental=instrumental,
+        audio_weight=audio_influence,
+        style_weight=style_weight,
+        weirdness=weirdness,
+        model=model,
+    )
+    if not cover_result.get("success"):
+        return json.dumps({"success": False, "error": f"Upload-cover failed: {cover_result.get('error')}"})
+
+    # Create task to track
+    task = manager.create_task(
+        prompt=f"[COMPOSED] {prompt}" if prompt else f"[COMPOSED] {style}",
+        style=style,
+        title=title,
+        model=model,
+        is_instrumental=instrumental,
+        agent_id=agent_id or None,
+    )
+    task.suno_task_id = cover_result["suno_task_id"]
+    task.status = TaskStatus.GENERATING
+    task.started_at = __import__("datetime").datetime.now().isoformat()
+    task.progress = f"Composing with audio_influence={audio_influence:.2f}..."
+    manager._save_tasks()
+
+    if blocking:
+        result = manager.run_task(task.task_id)
+        task = manager.get_task(task.task_id)
+        if result.get("success"):
+            return json.dumps({
+                "success": True,
+                "task_id": task.task_id,
+                "audio_file": task.audio_file,
+                "title": task.title,
+                "duration": task.duration,
+                "track_count": task.track_count,
+                "tracks": result.get("tracks", []),
+                "audio_influence": audio_influence,
+                "style": style,
+                "message": f"Composition complete: {task.title} ({task.track_count} tracks)",
+            })
+        else:
+            return json.dumps({
+                "success": False,
+                "task_id": task.task_id,
+                "error": result.get("error", "Generation failed"),
+            })
+    else:
+        thread = threading.Thread(target=manager.run_task, args=(task.task_id,), daemon=True)
+        thread.start()
+        return json.dumps({
+            "success": True,
+            "task_id": task.task_id,
+            "status": "generating",
+            "audio_influence": audio_influence,
+            "message": f"Composition started. Poll with music_status('{task.task_id}'). Takes 2-4 minutes.",
+        })
+
+
+def _midi_to_audio(midi_path: str, output_path: str) -> Dict[str, Any]:
+    """Convert MIDI to audio using timidity or fluidsynth."""
+    for cmd_template in [
+        ["timidity", midi_path, "-Ow", "-o", output_path],
+        ["fluidsynth", "-ni", "/usr/share/sounds/sf2/FluidR3_GM.sf2", midi_path, "-F", output_path, "-r", "44100"],
+    ]:
+        try:
+            result = subprocess.run(cmd_template, capture_output=True, timeout=30)
+            if result.returncode == 0 and Path(output_path).exists():
+                return {"success": True, "audio_path": output_path}
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+
+    return {
+        "success": False,
+        "error": "No MIDI synthesizer found. Install timidity or fluidsynth: "
+                 "sudo apt install timidity (or brew install timidity)",
+    }
+
+
+def _cleanup_file(path: str):
+    """Silently remove a file."""
+    try:
+        Path(path).unlink()
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Tool schemas (OpenAI format for Hermes)
+# ---------------------------------------------------------------------------
+
+TOOL_SCHEMAS = {
+    "music_generate": {
+        "name": "music_generate",
+        "description": (
+            "Generate AI music via Suno. By default waits until complete and returns "
+            "the audio file path. Set blocking=False to return immediately with task_id "
+            "for polling. Generation takes 2-4 minutes."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "Music description or lyrics. Be specific about mood, genre, instruments, tempo.",
+                },
+                "style": {
+                    "type": "string",
+                    "description": "Style tags (e.g., 'electronic ambient', 'jazz piano', 'epic orchestral')",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Song title (optional, auto-generated if empty)",
+                },
+                "model": {
+                    "type": "string",
+                    "enum": ["V3_5", "V4", "V4_5", "V5"],
+                    "description": "Suno model version. V5 is newest and best quality.",
+                },
+                "is_instrumental": {
+                    "type": "boolean",
+                    "description": "True for instrumental (no vocals), False for AI vocals",
+                },
+                "blocking": {
+                    "type": "boolean",
+                    "description": "If True (default), waits for completion. If False, returns task_id for polling.",
+                },
+                "agent_id": {
+                    "type": "string",
+                    "description": "ID of the creating agent for attribution.",
+                },
+            },
+            "required": ["prompt"],
+        },
+    },
+    "music_status": {
+        "name": "music_status",
+        "description": "Check the progress of a music generation task.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "description": "The task ID returned by music_generate()",
+                },
+            },
+            "required": ["task_id"],
+        },
+    },
+    "music_result": {
+        "name": "music_result",
+        "description": (
+            "Get the result of a completed music generation — audio file path, URL, "
+            "title, duration, and all tracks."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "description": "The task ID returned by music_generate()",
+                },
+            },
+            "required": ["task_id"],
+        },
+    },
+    "music_list": {
+        "name": "music_list",
+        "description": "List recent music generation tasks with status, title, and file paths.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of tasks to return (default 10)",
+                },
+            },
+            "required": [],
+        },
+    },
+    "music_favorite": {
+        "name": "music_favorite",
+        "description": "Toggle or set favorite status for a song or specific track.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "description": "The task ID of the song to favorite",
+                },
+                "track": {
+                    "type": "integer",
+                    "description": "1-indexed track number to favorite. Omit to favorite the whole song.",
+                },
+                "favorite": {
+                    "type": "boolean",
+                    "description": "True to favorite, False to unfavorite. Omit to toggle.",
+                },
+            },
+            "required": ["task_id"],
+        },
+    },
+    "music_library": {
+        "name": "music_library",
+        "description": "Browse the music library with filters — by agent, favorites, or status.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type": "string",
+                    "description": "Filter by creator agent ID",
+                },
+                "favorites_only": {
+                    "type": "boolean",
+                    "description": "Only show favorited songs",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["completed", "failed", "pending", "generating"],
+                    "description": "Filter by status",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum songs to return (default 20)",
+                },
+            },
+            "required": [],
+        },
+    },
+    "music_search": {
+        "name": "music_search",
+        "description": "Search songs by title, prompt, or style text.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search text to match against title, prompt, or style",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum results (default 10)",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    "music_play": {
+        "name": "music_play",
+        "description": (
+            "Play a song — plays audio locally via mpg123 (or similar), auto-stops "
+            "any currently playing track. Returns the audio file path."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "description": "The task ID of the song to play",
+                },
+                "track": {
+                    "type": "integer",
+                    "description": "Which track to play, 1-indexed (default: 1). Suno generates 2 tracks per song.",
+                },
+            },
+            "required": ["task_id"],
+        },
+    },
+    "music_stop": {
+        "name": "music_stop",
+        "description": "Stop the currently playing audio track.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    "music_delete": {
+        "name": "music_delete",
+        "description": (
+            "Archive or permanently delete a song or specific track. "
+            "By default archives (moves to archive folder). "
+            "Use permanent=True to delete files from disk."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "description": "The task ID of the song",
+                },
+                "track": {
+                    "type": "integer",
+                    "description": "1-indexed track number. Omit to archive/delete all tracks.",
+                },
+                "permanent": {
+                    "type": "boolean",
+                    "description": "If True, permanently delete files. If False (default), move to archive.",
+                },
+            },
+            "required": ["task_id"],
+        },
+    },
+    "midi_create": {
+        "name": "midi_create",
+        "description": (
+            "Create a MIDI file from a list of notes. Use to compose melodies, arpeggios, or chord "
+            "progressions, then pass the output to music_compose() for AI-generated music based on "
+            "your composition. Notes: MIDI numbers (60=C4) or names ('C4', 'F#3', 'Bb5'). "
+            "Use 'R' or 0 for rests."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "notes": {
+                    "type": "array",
+                    "items": {"oneOf": [{"type": "integer"}, {"type": "string"}]},
+                    "description": "Notes: MIDI numbers (60, 64, 67) or names ('C4', 'E4', 'G4'). 0 or 'R' for rests.",
+                },
+                "tempo": {
+                    "type": "integer",
+                    "description": "Beats per minute (default 120)",
+                },
+                "note_duration": {
+                    "type": "number",
+                    "description": "Duration per note in beats (0.5 = eighth note, 1.0 = quarter)",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Filename for the MIDI file",
+                },
+                "velocity": {
+                    "type": "integer",
+                    "description": "Note loudness 0-127 (default 100)",
+                },
+                "rest_between": {
+                    "type": "number",
+                    "description": "Gap between notes in beats (default 0.0)",
+                },
+            },
+            "required": ["notes"],
+        },
+    },
+    "music_compose": {
+        "name": "music_compose",
+        "description": (
+            "Generate music using a MIDI file as compositional reference. Your MIDI (melody, chords, "
+            "rhythm) is converted to audio and used as reference for Suno AI. audio_influence controls "
+            "how closely Suno follows your composition (0.2=free, 0.5=balanced, 0.8=close)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "midi_file": {
+                    "type": "string",
+                    "description": "Path to a MIDI file to use as reference",
+                },
+                "style": {
+                    "type": "string",
+                    "description": "Style tags (e.g., 'dark electronic ambient', 'jazz piano')",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Track title",
+                },
+                "audio_influence": {
+                    "type": "number",
+                    "description": "How much MIDI reference affects output (0.0-1.0, default 0.5)",
+                },
+                "prompt": {
+                    "type": "string",
+                    "description": "Additional description (becomes lyrics if not instrumental)",
+                },
+                "instrumental": {
+                    "type": "boolean",
+                    "description": "True for instrumental, False for AI vocals (default True)",
+                },
+                "style_weight": {
+                    "type": "number",
+                    "description": "How strongly to apply style tags (0.0-1.0, default 0.5)",
+                },
+                "weirdness": {
+                    "type": "number",
+                    "description": "Creative deviation (0.0-1.0, default 0.3)",
+                },
+                "model": {
+                    "type": "string",
+                    "enum": ["V3_5", "V4", "V4_5", "V5"],
+                    "description": "Suno model version (default V5)",
+                },
+                "blocking": {
+                    "type": "boolean",
+                    "description": "Wait for completion (True) or return task_id for polling (False)",
+                },
+                "agent_id": {
+                    "type": "string",
+                    "description": "ID of the creating agent for attribution",
+                },
+            },
+            "required": ["midi_file", "style", "title"],
+        },
+    },
+}
+
+# Handler dispatch map
+TOOL_HANDLERS = {
+    "music_generate": _handle_music_generate,
+    "music_status": _handle_music_status,
+    "music_result": _handle_music_result,
+    "music_list": _handle_music_list,
+    "music_favorite": _handle_music_favorite,
+    "music_library": _handle_music_library,
+    "music_search": _handle_music_search,
+    "music_play": _handle_music_play,
+    "music_stop": _handle_music_stop,
+    "music_delete": _handle_music_delete,
+    "midi_create": _handle_midi_create,
+    "music_compose": _handle_music_compose,
+}
+
+
+# ---------------------------------------------------------------------------
+# Plugin entry point — called by Hermes PluginManager
+# ---------------------------------------------------------------------------
+
+def register(ctx):
+    """Register all music tools with Hermes."""
+    toolset = "music"
+
+    for name, schema in TOOL_SCHEMAS.items():
+        handler = TOOL_HANDLERS[name]
+
+        # midi_create doesn't need SUNO_API_KEY
+        if name == "midi_create":
+            check_fn = _check_midi_available
+            requires_env = []
+        elif name in ("music_stop",):
+            check_fn = _check_always
+            requires_env = []
+        else:
+            check_fn = _check_suno_available
+            requires_env = ["SUNO_API_KEY"]
+
+        ctx.register_tool(
+            name=name,
+            toolset=toolset,
+            schema=schema,
+            handler=handler,
+            check_fn=check_fn,
+            requires_env=requires_env,
+            emoji="🎵" if "music" in name else "🎹",
+        )
+
+    logger.info("Hermes Music Plugin v%s registered %d tools", __version__, len(TOOL_SCHEMAS))

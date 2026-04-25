@@ -1,0 +1,15 @@
+{
+  "name": "hermes-sonus",
+  "label": "Sonus",
+  "description": "Generate music with Suno, browse your library, compose from MIDI, and read felt-experience EEG sessions — all from the dashboard.",
+  "icon": "Sparkles",
+  "version": "1.0.0",
+  "tab": {
+    "path": "/sonus",
+    "position": "after:skills"
+  },
+  "slots": ["header-left", "sidebar"],
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}

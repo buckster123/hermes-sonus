@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-sonus"
+version = "1.0.0"
+description = "Sonic alchemy for Hermes Agent — Suno music generation, MIDI composition, OpenBCI felt-experience EEG, and a complete dashboard surface."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{name = "buckster123"}]
+keywords = ["hermes", "agent", "suno", "music", "eeg", "openbci", "bci", "midi", "ai-music", "felt-experience"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Scientific/Engineering :: Human Machine Interfaces",
+]
+dependencies = [
+    "requests>=2.28",
+    "numpy>=1.24",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+midi = ["midiutil>=1.2"]
+hardware = ["brainflow>=5.0"]
+retry = ["tenacity>=8.0"]
+all = ["midiutil>=1.2", "brainflow>=5.0", "tenacity>=8.0"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "responses>=0.23",
+    "midiutil>=1.2",
+    "tenacity>=8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/buckster123/hermes-sonus"
+Repository = "https://github.com/buckster123/hermes-sonus"
+Issues = "https://github.com/buckster123/hermes-sonus/issues"
+
+[tool.setuptools.packages.find]
+include = ["hermes_sonus*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --tb=short"

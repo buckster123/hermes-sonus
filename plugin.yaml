@@ -1,0 +1,33 @@
+name: hermes-sonus
+version: 1.0.0
+description: "Sonic alchemy for Hermes — Suno AI music generation, MIDI composition, music library, plus OpenBCI EEG felt-experience sensing. Pairs with the Trismegistus dashboard theme."
+author: buckster123
+kind: standalone
+requires_env:
+  - name: SUNO_API_KEY
+    description: "Optional. API key from sunoapi.org for music generation. EEG and library tools work without it."
+    required: false
+provides_tools:
+  # music toolset
+  - music_generate
+  - music_status
+  - music_result
+  - music_list
+  - music_favorite
+  - music_library
+  - music_search
+  - music_play
+  - music_stop
+  - music_delete
+  - midi_create
+  - music_compose
+  # eeg toolset
+  - eeg_connect
+  - eeg_disconnect
+  - eeg_stream_start
+  - eeg_stream_stop
+  - eeg_realtime_emotion
+  - eeg_experience_get
+  - eeg_calibrate_baseline
+  - eeg_list_sessions
+provides_hooks: []
