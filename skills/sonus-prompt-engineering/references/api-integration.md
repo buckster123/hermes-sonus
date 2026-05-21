@@ -107,16 +107,16 @@ Notes on the translation:
 
 Useful to know what's available beyond `generate`. Each has its own request format — consult `https://docs.sunoapi.org/` for parameter detail.
 
-> **Provider variance warning:** Third-party sunoapi.org instances may strip certain endpoints. The generation endpoint (`POST /api/v1/generate`) is the most reliable. Polling (`GET /api/v1/get-music-details`) and credits (`GET /api/v1/get-remaining-credits`) are sometimes unavailable — rely on your provider's dashboard or callback URL for status.
+> **Provider variance warning:** Third-party sunoapi.org instances may strip certain endpoints. The generation endpoint (`POST /api/v1/generate`) is the most reliable. Check your provider's dashboard for the latest endpoint availability.
 
 ### Music generation
 - `POST /api/v1/generate` — generate new music
-- `POST /api/v1/extend` — extend an existing track
+- `GET /api/v1/generate/record-info?taskId=<id>` — poll task status
+- `POST /api/v1/extend` — extend a track
 - `POST /api/v1/upload-and-cover` — upload audio and generate a cover
 - `POST /api/v1/upload-and-extend` — upload audio and extend it
 - `POST /api/v1/add-instrumental` — add instrumental layers to a vocal-only base
 - `POST /api/v1/add-vocals` — add vocals to an instrumental base
-- `GET /api/v1/get-music-details` — poll task status
 - `POST /api/v1/get-timestamped-lyrics` — retrieve timed lyric data
 - `POST /api/v1/boost-style` — strengthen style adherence on an existing track
 - `POST /api/v1/cover-suno` — generate a cover via Suno's Cover feature
@@ -129,12 +129,10 @@ Useful to know what's available beyond `generate`. Each has its own request form
 - `GET /api/v1/suno-voice-validate-info` — fetch the verification phrase
 - `POST /api/v1/suno-voice-generate` — create a custom voice from a recording
 - `GET /api/v1/suno-voice-record-info` — get voice record details
-- `POST /api/v1/suno-voice-regenerate` — regenerate the verification phrase
-- `POST /api/v1/suno-voice-check-voice` — check voice availability
 
 ### Lyrics
 - `POST /api/v1/generate-lyrics` — generate lyrics independently of music
-- `GET /api/v1/get-lyrics-details` — poll lyrics generation
+- `GET /api/v1/generate/record-info?taskId=<id>` — poll lyrics generation
 
 ### Sounds / WAV / Stems / MIDI
 - `POST /api/v1/generate-sounds` — generate non-musical sound effects
@@ -146,7 +144,7 @@ Useful to know what's available beyond `generate`. Each has its own request form
 - `POST /api/v1/create-music-video` — generate a music video from a track
 
 ### Account
-- `GET /api/v1/get-remaining-credits` — check account balance
+- `GET /api/v1/generate/credit` — check account balance
 
 ### File upload
 - `POST /api/v1/upload-base64` — upload a file as base64

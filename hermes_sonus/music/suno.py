@@ -162,7 +162,7 @@ def poll_completion(suno_task_id: str, max_wait: int = 600, poll_interval: int =
         try:
             response = _api_call(
                 "GET",
-                f"{SUNO_API_BASE}/get-music-details",
+                f"{SUNO_API_BASE}/generate/record-info",
                 headers=headers,
                 params={"taskId": suno_task_id},
                 timeout=10,
@@ -359,7 +359,7 @@ def clone_voice_create(audio_url: str, task_id: str) -> str:
 
 def check_credits() -> Dict[str, Any]:
     """Check remaining API credits."""
-    response = _api_call("GET", f"{SUNO_API_BASE}/get-remaining-credits", headers=_headers())
+    response = _api_call("GET", f"{SUNO_API_BASE}/generate/credit", headers=_headers())
     # Handle 404 gracefully — credits endpoint may be stripped by provider
     if response.status_code == 404:
         return {
@@ -374,6 +374,13 @@ def check_credits() -> Dict[str, Any]:
     response.raise_for_status()
     result = response.json()
     data = result.get("data", {})
+    if isinstance(data, (int, float)):
+        return {
+            "success": True,
+            "credits_remaining": data,
+            "credits_total": "unknown",
+            "raw": result,
+        }
     return {
         "success": True,
         "credits_remaining": data.get("remaining", "unknown"),

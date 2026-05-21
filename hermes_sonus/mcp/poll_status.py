@@ -30,7 +30,7 @@ from pathlib import Path
 
 # Default sunoapi.org details endpoint. Override with --base-url for alt wrappers.
 DEFAULT_BASE_URL = "https://api.sunoapi.org"
-DETAILS_PATH = "/api/v1/get-music-details"
+DETAILS_PATH = "/api/v1/generate/record-info"
 
 # Terminal states (stop polling once we hit any of these)
 TERMINAL_STATES = {"complete", "error", "failed", "cancelled", "expired"}
@@ -50,6 +50,7 @@ def fetch_status(base_url: str, task_id: str, api_key: str) -> dict:
         headers={
             "Authorization": f"Bearer {api_key}",
             "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         },
     )
     try:

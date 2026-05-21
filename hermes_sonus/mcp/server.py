@@ -620,7 +620,7 @@ def check_credits() -> dict:
     err = _require_api_key()
     if err:
         return {"error": err}
-    result = _get("/api/v1/get-remaining-credits")
+    result = _get("/api/v1/generate/credit")
     if result.get("status") == 404 or result.get("code") == 404:
         return {
             "available": "unknown",
