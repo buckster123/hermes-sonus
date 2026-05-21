@@ -459,6 +459,229 @@ def _handle_music_check_credits(args: dict, **kw) -> str:
         return json.dumps({"success": False, "error": str(e)})
 
 
+def _handle_music_generate_album(args: dict, **kw) -> str:
+    """Generate multiple coherent tracks from a manifest (DNA or explicit mode)."""
+    from pathlib import Path as _Path
+    from hermes_sonus.mcp.batch_generate import parse_manifest, fields_dict_to_parsed, detect_instrumental, fire_request
+    from hermes_sonus.mcp.build_payload import build_payload, validate_limits, merge_unhinged_seed_into_lyrics
+    from .tasks import TaskStatus
+
+    manager = _get_manager()
+    if manager is None:
+        return json.dumps({"success": False, "error": "Failed to initialize task manager"})
+
+    manifest_text = args.get("manifest_text", "")
+    manifest_file = args.get("manifest_file", "")
+    model = args.get("model", "V5")
+    callback_url = args.get("callback_url", "")
+    blocking = args.get("blocking", True)
+    agent_id = args.get("agent_id", "")
+    continue_on_error = args.get("continue_on_error", True)
+    rate_interval = args.get("rate_interval", 0.75)
+
+    # Load manifest
+    try:
+        if manifest_file:
+            mf = _Path(manifest_file)
+            if not mf.exists():
+                return json.dumps({"success": False, "error": f"Manifest file not found: {manifest_file}"})
+            text = mf.read_text(encoding="utf-8")
+            try:
+                manifest = json.loads(text)
+            except Exception:
+                try:
+                    import yaml as _yaml
+                    manifest = _yaml.safe_load(text)
+                except Exception:
+                    return json.dumps({"success": False, "error": "Manifest is not valid JSON or YAML"})
+        elif manifest_text:
+            try:
+                manifest = json.loads(manifest_text)
+            except Exception:
+                try:
+                    import yaml as _yaml
+                    manifest = _yaml.safe_load(manifest_text)
+                except Exception:
+                    return json.dumps({"success": False, "error": "Manifest text is not valid JSON or YAML"})
+        else:
+            return json.dumps({"success": False, "error": "Provide manifest_text or manifest_file"})
+    except Exception as e:
+        return json.dumps({"success": False, "error": f"Failed to load manifest: {e}"})
+
+    # Parse manifest into resolved tracks + settings
+    try:
+        resolved_tracks, settings = parse_manifest(manifest)
+    except ValueError as e:
+        return json.dumps({"success": False, "error": f"Invalid manifest: {e}"})
+
+    # Override settings from args
+    if model:
+        settings["model"] = model
+    if callback_url:
+        settings["callback_url"] = callback_url
+    model = settings["model"]
+    callback_url = settings.get("callback_url", "")
+
+    # Validate callback
+    if not callback_url:
+        return json.dumps({"success": False, "error": "callback_url required (set in manifest or pass as arg)"})
+
+    # Build payloads and create album project
+    album_title = manifest.get("album_title") or manifest.get("title")
+    if not album_title:
+        dna = manifest.get("album_dna", {})
+        album_title = dna.get("album_title") if isinstance(dna, dict) else None
+    if not album_title:
+        album_title = f"Album_{len(resolved_tracks)}tracks"
+    album = manager.create_album(
+        title=album_title,
+        manifest=manifest,
+        model=model,
+        agent_id=agent_id or None,
+    )
+
+    payloads = []
+    all_warnings = []
+    for i, track_dict in enumerate(resolved_tracks):
+        fields = fields_dict_to_parsed(track_dict)
+        merge_unhinged_seed_into_lyrics(fields)
+        instrumental = detect_instrumental(fields, settings.get("instrumental"))
+        warnings = validate_limits(fields, model, instrumental, settings.get("custom_mode", True))
+        if warnings:
+            all_warnings.append({"track_index": i + 1, "warnings": warnings})
+        payload = build_payload(fields, model, callback_url, instrumental, settings.get("custom_mode", True))
+        payloads.append(payload)
+
+    # Create MusicTasks for each track
+    track_tasks = []
+    for i, payload in enumerate(payloads):
+        # Extract a prompt from the payload for the task record
+        prompt_text = payload.get("prompt", "")
+        if not prompt_text:
+            prompt_text = payload.get("gpt_description_prompt", "")
+        style_text = payload.get("style", "")
+        title_text = payload.get("title", f"{album_title} — Track {i + 1}")
+
+        task = manager.create_task(
+            prompt=prompt_text,
+            style=style_text,
+            title=title_text,
+            model=model,
+            is_instrumental=payload.get("instrumental", True),
+            agent_id=agent_id or None,
+        )
+        track_tasks.append(task)
+        album.track_task_ids.append(task.task_id)
+    manager._save_albums()
+
+    # Fire generation requests with rate limiting
+    api_key = os.environ.get("SUNO_API_KEY", "")
+    base_url = os.environ.get("SUNO_BASE_URL", "https://api.sunoapi.org")
+
+    fired = []
+    errors = []
+    for i, (payload, task) in enumerate(zip(payloads, track_tasks), 1):
+        if i > 1:
+            time.sleep(rate_interval)
+        try:
+            response = fire_request(payload, api_key, base_url)
+            task_id_from_api = None
+            if response.get("code") == 200 and response.get("data"):
+                task_id_from_api = response["data"].get("taskId") or response["data"].get("task_id")
+            if task_id_from_api:
+                task.suno_task_id = task_id_from_api
+                task.status = TaskStatus.GENERATING
+                task.started_at = __import__("datetime").datetime.now().isoformat()
+                task.progress = "Queued at Suno..."
+                manager._save_tasks()
+                fired.append({"track": i, "task_id": task.task_id, "suno_task_id": task_id_from_api, "status": "fired"})
+            else:
+                err_msg = response.get("msg", "Unknown API error")
+                errors.append({"track": i, "task_id": task.task_id, "error": err_msg})
+                task.status = TaskStatus.FAILED
+                task.error = err_msg
+                manager._save_tasks()
+                if not continue_on_error:
+                    break
+        except Exception as e:
+            err_msg = str(e)
+            errors.append({"track": i, "task_id": task.task_id, "error": err_msg})
+            task.status = TaskStatus.FAILED
+            task.error = err_msg
+            manager._save_tasks()
+            if not continue_on_error:
+                break
+
+    # Update album status
+    if errors and len(errors) == len(track_tasks):
+        manager.update_album_status(album.album_id, TaskStatus.FAILED, error=f"All {len(errors)} tracks failed")
+    elif errors:
+        manager.update_album_status(album.album_id, TaskStatus.GENERATING,
+                                    progress=f"Fired {len(fired)}/{len(track_tasks)} tracks, {len(errors)} failed")
+    else:
+        manager.update_album_status(album.album_id, TaskStatus.GENERATING,
+                                    progress=f"Fired {len(fired)} track(s), polling...")
+
+    if blocking:
+        # Poll each track to completion sequentially
+        for ft in fired:
+            task = manager.get_task(ft["task_id"])
+            if not task or task.status == TaskStatus.FAILED:
+                continue
+            try:
+                result = manager.run_task(task.task_id)
+                if not result.get("success"):
+                    ft["status"] = "failed"
+                    ft["error"] = result.get("error", "Unknown")
+                else:
+                    ft["status"] = "completed"
+                    ft["tracks"] = result.get("tracks", [])
+            except Exception as e:
+                ft["status"] = "failed"
+                ft["error"] = str(e)
+
+        # Final album status
+        completed_count = sum(1 for ft in fired if ft["status"] == "completed")
+        if completed_count == len(fired):
+            manager.update_album_status(album.album_id, TaskStatus.COMPLETED,
+                                        progress=f"All {completed_count} tracks complete")
+        else:
+            manager.update_album_status(album.album_id, TaskStatus.COMPLETED if completed_count > 0 else TaskStatus.FAILED,
+                                        progress=f"{completed_count}/{len(fired)} tracks complete")
+
+        return json.dumps({
+            "success": True,
+            "album_id": album.album_id,
+            "title": album.title,
+            "model": album.model,
+            "track_count": len(track_tasks),
+            "tracks_fired": len(fired),
+            "tracks_completed": completed_count,
+            "errors": errors,
+            "warnings": all_warnings,
+            "track_task_ids": album.track_task_ids,
+            "fired_details": fired,
+            "message": f"Album '{album.title}' complete: {completed_count}/{len(track_tasks)} tracks generated.",
+        })
+    else:
+        # Non-blocking: return immediately, user polls individual tasks
+        return json.dumps({
+            "success": True,
+            "album_id": album.album_id,
+            "title": album.title,
+            "model": album.model,
+            "track_count": len(track_tasks),
+            "tracks_fired": len(fired),
+            "errors": errors,
+            "warnings": all_warnings,
+            "track_task_ids": album.track_task_ids,
+            "message": (
+                f"Album '{album.title}' fired {len(fired)}/{len(track_tasks)} tracks. "
+                f"Poll individual tasks with music_status()."
+            ),
+        })
+
+
 def _handle_music_extend(args: dict, **kw) -> str:
     from . import suno
     try:
@@ -914,6 +1137,53 @@ TOOL_SCHEMAS = {
             "properties": {},
         },
     },
+    "music_generate_album": {
+        "name": "music_generate_album",
+        "description": (
+            "Generate multiple coherent tracks from an album/EP manifest (YAML/JSON). "
+            "Supports DNA mode (shared style fragments + per-track deltas) or explicit mode "
+            "(complete field set per track). Rate-limited firing to respect API ceilings."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "manifest_text": {
+                    "type": "string",
+                    "description": "Raw manifest as JSON or YAML string. Provide this OR manifest_file.",
+                },
+                "manifest_file": {
+                    "type": "string",
+                    "description": "Path to a JSON or YAML manifest file. Provide this OR manifest_text.",
+                },
+                "model": {
+                    "type": "string",
+                    "enum": ["V4", "V4_5", "V4_5PLUS", "V4_5ALL", "V5", "V5_5"],
+                    "description": "Override model from manifest.",
+                },
+                "callback_url": {
+                    "type": "string",
+                    "description": "Override callback URL from manifest (required if not in manifest).",
+                },
+                "blocking": {
+                    "type": "boolean",
+                    "description": "If True (default), waits for all tracks. If False, returns immediately with task_ids.",
+                },
+                "agent_id": {
+                    "type": "string",
+                    "description": "ID of the creating agent for attribution.",
+                },
+                "continue_on_error": {
+                    "type": "boolean",
+                    "description": "Continue firing remaining tracks if one fails (default True).",
+                },
+                "rate_interval": {
+                    "type": "number",
+                    "description": "Seconds between API requests (default 0.75).",
+                },
+            },
+            "required": [],
+        },
+    },
 }
 
 # Handler dispatch map
@@ -935,6 +1205,7 @@ TOOL_HANDLERS = {
     "music_clone_voice_validate": _handle_music_clone_voice_validate,
     "music_clone_voice_create": _handle_music_clone_voice_create,
     "music_check_credits": _handle_music_check_credits,
+    "music_generate_album": _handle_music_generate_album,
 }
 
 

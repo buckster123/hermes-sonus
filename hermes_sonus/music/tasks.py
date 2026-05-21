@@ -219,6 +219,57 @@ class MusicTask:
         )
 
 
+@dataclass
+class AlbumProject:
+    """Represents a multi-track album/EP generation project."""
+    album_id: str
+    title: str = ""
+    manifest: Dict[str, Any] = field(default_factory=dict)
+    model: str = "V5"
+    track_task_ids: List[str] = field(default_factory=list)
+    status: TaskStatus = TaskStatus.PENDING
+    progress: str = "Queued"
+    error: Optional[str] = None
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    completed_at: Optional[str] = None
+    agent_id: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "album_id": self.album_id,
+            "title": self.title,
+            "manifest": self.manifest,
+            "model": self.model,
+            "track_task_ids": self.track_task_ids,
+            "status": self.status.value,
+            "progress": self.progress,
+            "error": self.error,
+            "created_at": self.created_at,
+            "completed_at": self.completed_at,
+            "agent_id": self.agent_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AlbumProject":
+        try:
+            status = TaskStatus(data.get("status", "pending"))
+        except ValueError:
+            status = TaskStatus.PENDING
+        return cls(
+            album_id=data["album_id"],
+            title=data.get("title", ""),
+            manifest=data.get("manifest", {}),
+            model=data.get("model", "V5"),
+            track_task_ids=data.get("track_task_ids", []),
+            status=status,
+            progress=data.get("progress", "Queued"),
+            error=data.get("error"),
+            created_at=data.get("created_at", datetime.now().isoformat()),
+            completed_at=data.get("completed_at"),
+            agent_id=data.get("agent_id"),
+        )
+
+
 class MusicTaskManager:
     """Manages music generation tasks with JSON persistence."""
 
@@ -228,7 +279,9 @@ class MusicTaskManager:
         self.midi_dir = data_dir / "midi"
         self.archive_dir = data_dir / "archive"
         self.tasks_file = data_dir / "tasks.json"
+        self.albums_file = data_dir / "albums.json"
         self.tasks: Dict[str, MusicTask] = {}
+        self.albums: Dict[str, AlbumProject] = {}
         self._lock = threading.Lock()
 
         # Ensure directories exist
@@ -237,6 +290,7 @@ class MusicTaskManager:
         self.archive_dir.mkdir(parents=True, exist_ok=True)
 
         self._load_tasks()
+        self._load_albums()
 
     def _load_tasks(self):
         """Load tasks from JSON file, auto-migrating v1 format."""
@@ -289,6 +343,75 @@ class MusicTaskManager:
                 json.dump(data, f, indent=2)
         except Exception as e:
             logger.error("Error saving music tasks: %s", e)
+
+    def _load_albums(self):
+        """Load album projects from JSON file."""
+        try:
+            if self.albums_file.exists():
+                with open(self.albums_file, "r") as f:
+                    data = json.load(f)
+                for album_id, album_data in data.items():
+                    self.albums[album_id] = AlbumProject.from_dict(album_data)
+                logger.info("Loaded %d album projects", len(self.albums))
+        except Exception as e:
+            logger.error("Error loading album projects: %s", e)
+
+    def _save_albums(self):
+        """Save album projects to JSON file."""
+        try:
+            self.albums_file.parent.mkdir(parents=True, exist_ok=True)
+            data = {aid: a.to_dict() for aid, a in self.albums.items()}
+            with open(self.albums_file, "w") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.error("Error saving album projects: %s", e)
+
+    def create_album(
+        self,
+        title: str,
+        manifest: Dict[str, Any],
+        model: str = "V5",
+        agent_id: Optional[str] = None,
+    ) -> AlbumProject:
+        """Create a new album project."""
+        album_id = f"album_{int(datetime.now().timestamp() * 1000)}_{random.randint(100, 999)}"
+        album = AlbumProject(
+            album_id=album_id,
+            title=title,
+            manifest=manifest,
+            model=model,
+            agent_id=agent_id,
+        )
+        with self._lock:
+            self.albums[album_id] = album
+            self._save_albums()
+        logger.info("Created album project %s: %s (%d tracks)", album_id, title,
+                    len(manifest.get("tracks", [])))
+        return album
+
+    def get_album(self, album_id: str) -> Optional[AlbumProject]:
+        return self.albums.get(album_id)
+
+    def list_albums(self, limit: int = 10) -> List[AlbumProject]:
+        sorted_albums = sorted(
+            self.albums.values(),
+            key=lambda a: a.created_at,
+            reverse=True,
+        )
+        return sorted_albums[:limit]
+
+    def update_album_status(self, album_id: str, status: TaskStatus, progress: str = "", error: Optional[str] = None):
+        album = self.get_album(album_id)
+        if not album:
+            return
+        album.status = status
+        if progress:
+            album.progress = progress
+        if error:
+            album.error = error
+        if status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
+            album.completed_at = datetime.now().isoformat()
+        self._save_albums()
 
     def create_task(
         self,

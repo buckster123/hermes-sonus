@@ -183,6 +183,89 @@ async def music_compose(body: ComposeRequest) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Album projects
+# ---------------------------------------------------------------------------
+
+class AlbumGenerateRequest(BaseModel):
+    manifest_text: str = ""
+    manifest_file: str = ""
+    model: str = "V5"
+    callback_url: str = ""
+    blocking: bool = False
+    agent_id: str = "dashboard"
+    continue_on_error: bool = True
+    rate_interval: float = 0.75
+
+
+@router.post("/album")
+async def album_generate(body: AlbumGenerateRequest) -> Dict[str, Any]:
+    return _call(_music._handle_music_generate_album, body.model_dump())
+
+
+@router.get("/albums")
+async def album_list(limit: int = Query(25, ge=1, le=500)) -> Dict[str, Any]:
+    manager = _music._get_manager()
+    albums = manager.list_albums(limit=limit)
+    return {
+        "albums": [
+            {
+                "album_id": a.album_id,
+                "title": a.title,
+                "status": a.status.value,
+                "model": a.model,
+                "track_count": len(a.track_task_ids),
+                "progress": a.progress,
+                "created_at": a.created_at,
+                "agent_id": a.agent_id,
+            }
+            for a in albums
+        ],
+        "count": len(albums),
+        "total": len(manager.albums),
+    }
+
+
+@router.get("/albums/{album_id}")
+async def album_get(album_id: str) -> Dict[str, Any]:
+    manager = _music._get_manager()
+    album = manager.get_album(album_id)
+    if not album:
+        raise HTTPException(404, f"Album {album_id} not found")
+
+    tracks = []
+    for tid in album.track_task_ids:
+        task = manager.get_task(tid)
+        if task:
+            tracks.append({
+                "task_id": task.task_id,
+                "title": task.title,
+                "status": task.status.value,
+                "progress": task.progress,
+                "audio_file": task.audio_file,
+                "audio_url": task.audio_url,
+                "duration": task.duration,
+                "track_count": task.track_count,
+                "error": task.error,
+            })
+        else:
+            tracks.append({"task_id": tid, "status": "unknown", "error": "Task not found"})
+
+    return {
+        "album_id": album.album_id,
+        "title": album.title,
+        "status": album.status.value,
+        "model": album.model,
+        "progress": album.progress,
+        "error": album.error,
+        "created_at": album.created_at,
+        "completed_at": album.completed_at,
+        "agent_id": album.agent_id,
+        "tracks": tracks,
+        "manifest": album.manifest,
+    }
+
+
+# ---------------------------------------------------------------------------
 # EEG — connection + sessions + live state
 # ---------------------------------------------------------------------------
 

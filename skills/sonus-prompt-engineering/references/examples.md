@@ -384,3 +384,20 @@ python scripts/batch_generate.py --input album.yaml --fire --continue-on-error
 - **Easy variation:** changing the album's DNA propagates to all tracks instantly
 - **Targeted overrides:** any track can break the pattern with the `!` override sigil
 - **Production-ready:** the manifest itself becomes a project artifact — versionable in git, regeneratable when v6 drops, reusable as a template for the next album
+
+---
+
+## Using manifests via Hermes-Sonus v2.0
+
+Instead of running `batch_generate.py` directly, pass the manifest to the plugin:
+
+```
+music_generate_album manifest_text='{"model":"V5","album_dna":{...},"tracks":[...]}' callback_url=https://your.app/cb blocking=True
+```
+
+Or via the dashboard: POST `/api/plugins/hermes-sonus/album` with the manifest. The plugin creates an `AlbumProject`, fires tracks with rate limiting, and returns per-track `task_id`s for polling.
+
+Dashboard endpoints:
+- `POST /album` — generate from manifest
+- `GET /albums` — list album projects
+- `GET /albums/{album_id}` — get album with per-track status
