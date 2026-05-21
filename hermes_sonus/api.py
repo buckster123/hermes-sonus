@@ -266,6 +266,63 @@ async def album_get(album_id: str) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Advanced audio editing
+# ---------------------------------------------------------------------------
+
+class StemsRequest(BaseModel):
+    track_index: int = 0
+
+
+@router.post("/tasks/{task_id}/stems")
+async def music_separate_stems(task_id: str, body: StemsRequest) -> Dict[str, Any]:
+    return _call(_music._handle_music_separate_stems, {"task_id": task_id, "track_index": body.track_index})
+
+
+class ReplaceSectionRequest(BaseModel):
+    section_type: str
+    new_lyrics: str
+
+
+@router.post("/tasks/{task_id}/replace-section")
+async def music_replace_section(task_id: str, body: ReplaceSectionRequest) -> Dict[str, Any]:
+    return _call(_music._handle_music_replace_section, {
+        "task_id": task_id,
+        "section_type": body.section_type,
+        "new_lyrics": body.new_lyrics,
+    })
+
+
+class BoostStyleRequest(BaseModel):
+    target_style: str
+
+
+@router.post("/tasks/{task_id}/boost-style")
+async def music_boost_style(task_id: str, body: BoostStyleRequest) -> Dict[str, Any]:
+    return _call(_music._handle_music_boost_style, {"task_id": task_id, "target_style": body.target_style})
+
+
+@router.post("/tasks/{task_id}/convert-wav")
+async def music_convert_wav(task_id: str) -> Dict[str, Any]:
+    return _call(_music._handle_music_convert_to_wav, {"task_id": task_id})
+
+
+@router.post("/tasks/{task_id}/video")
+async def music_create_video(task_id: str) -> Dict[str, Any]:
+    return _call(_music._handle_music_create_video, {"task_id": task_id})
+
+
+class SoundsRequest(BaseModel):
+    prompt: str
+    duration: int = 5
+    model: str = "V5"
+
+
+@router.post("/sounds")
+async def music_generate_sounds(body: SoundsRequest) -> Dict[str, Any]:
+    return _call(_music._handle_music_generate_sounds, body.model_dump())
+
+
+# ---------------------------------------------------------------------------
 # EEG — connection + sessions + live state
 # ---------------------------------------------------------------------------
 

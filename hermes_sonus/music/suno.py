@@ -47,6 +47,12 @@ __all__ = [
     "clone_voice_validate",
     "clone_voice_create",
     "check_credits",
+    "separate_stems",
+    "replace_section",
+    "boost_style",
+    "convert_to_wav",
+    "create_music_video",
+    "generate_sounds",
 ]
 
 logger = logging.getLogger(__name__)
@@ -356,3 +362,97 @@ def check_credits() -> Dict[str, Any]:
     response = _api_call("GET", f"{SUNO_API_BASE}/get-remaining-credits", headers=_headers())
     response.raise_for_status()
     return response.json()
+
+
+# ---------------------------------------------------------------------------
+# Advanced audio editing (v2.0 Phase C)
+# ---------------------------------------------------------------------------
+
+def separate_stems(task_id: str, track_index: int = 0) -> str:
+    """Separate vocals from instruments. Returns new task_id."""
+    payload = {
+        "taskId": task_id,
+        "trackIndex": track_index,
+        "callBackUrl": "https://localhost/callback",
+    }
+    response = _api_call("POST", f"{SUNO_API_BASE}/separate-vocals", headers=_headers(), json=payload)
+    response.raise_for_status()
+    result = response.json()
+    if result.get("code") != 200:
+        raise ValueError(f"Stem separation error: {result.get('msg', 'Unknown error')}")
+    return _extract_task_id(result)
+
+
+def replace_section(task_id: str, section_type: str, new_lyrics: str) -> str:
+    """Replace a section in a generated track. Returns new task_id."""
+    payload = {
+        "taskId": task_id,
+        "sectionType": section_type,
+        "newLyrics": new_lyrics,
+        "callBackUrl": "https://localhost/callback",
+    }
+    response = _api_call("POST", f"{SUNO_API_BASE}/replace-section", headers=_headers(), json=payload)
+    response.raise_for_status()
+    result = response.json()
+    if result.get("code") != 200:
+        raise ValueError(f"Replace section error: {result.get('msg', 'Unknown error')}")
+    return _extract_task_id(result)
+
+
+def boost_style(task_id: str, target_style: str) -> str:
+    """Strengthen style adherence on an existing track. Returns new task_id."""
+    payload = {
+        "taskId": task_id,
+        "targetStyle": target_style,
+        "callBackUrl": "https://localhost/callback",
+    }
+    response = _api_call("POST", f"{SUNO_API_BASE}/boost-style", headers=_headers(), json=payload)
+    response.raise_for_status()
+    result = response.json()
+    if result.get("code") != 200:
+        raise ValueError(f"Boost style error: {result.get('msg', 'Unknown error')}")
+    return _extract_task_id(result)
+
+
+def convert_to_wav(task_id: str) -> str:
+    """Convert MP3 output to WAV. Returns new task_id."""
+    payload = {
+        "taskId": task_id,
+        "callBackUrl": "https://localhost/callback",
+    }
+    response = _api_call("POST", f"{SUNO_API_BASE}/convert-to-wav", headers=_headers(), json=payload)
+    response.raise_for_status()
+    result = response.json()
+    if result.get("code") != 200:
+        raise ValueError(f"Convert to WAV error: {result.get('msg', 'Unknown error')}")
+    return _extract_task_id(result)
+
+
+def create_music_video(task_id: str) -> str:
+    """Generate a music video from a track. Returns new task_id."""
+    payload = {
+        "taskId": task_id,
+        "callBackUrl": "https://localhost/callback",
+    }
+    response = _api_call("POST", f"{SUNO_API_BASE}/create-music-video", headers=_headers(), json=payload)
+    response.raise_for_status()
+    result = response.json()
+    if result.get("code") != 200:
+        raise ValueError(f"Music video error: {result.get('msg', 'Unknown error')}")
+    return _extract_task_id(result)
+
+
+def generate_sounds(prompt: str, duration: int = 5, model: str = "V5") -> str:
+    """Generate non-musical sound effects. Returns task_id."""
+    payload = {
+        "prompt": prompt,
+        "duration": duration,
+        "model": model,
+        "callBackUrl": "https://localhost/callback",
+    }
+    response = _api_call("POST", f"{SUNO_API_BASE}/generate-sounds", headers=_headers(), json=payload)
+    response.raise_for_status()
+    result = response.json()
+    if result.get("code") != 200:
+        raise ValueError(f"Generate sounds error: {result.get('msg', 'Unknown error')}")
+    return _extract_task_id(result)

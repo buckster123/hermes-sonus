@@ -623,6 +623,147 @@ def check_credits() -> dict:
     return _get("/api/v1/get-remaining-credits")
 
 
+# --- Advanced audio editing (v2.0 Phase C) ---
+
+
+@mcp.tool()
+def separate_stems(task_id: str, track_index: int = 0) -> dict:
+    """Separate vocals from instruments for a completed track.
+
+    Args:
+        task_id: The task_id of the completed track to process.
+        track_index: Which variant to process (0 or 1, since Suno returns 2 tracks).
+
+    Returns:
+        Dict with new task_id for the stem separation job.
+    """
+    err = _require_api_key()
+    if err:
+        return {"error": err}
+    response = _post("/api/v1/separate-vocals", {
+        "taskId": task_id,
+        "trackIndex": track_index,
+        "callBackUrl": SUNO_CALLBACK_URL or "https://localhost/callback",
+    })
+    new_task_id = response.get("data", {}).get("taskId") if isinstance(response.get("data"), dict) else None
+    return {"task_id": new_task_id, "response": response}
+
+
+@mcp.tool()
+def replace_section(task_id: str, section_type: str, new_lyrics: str) -> dict:
+    """Replace a specific section in a generated track with new lyrics.
+
+    Args:
+        task_id: The task_id of the track to edit.
+        section_type: Section to replace — e.g., "verse", "chorus", "bridge".
+        new_lyrics: The new lyrics for that section.
+
+    Returns:
+        Dict with new task_id for the edited track.
+    """
+    err = _require_api_key()
+    if err:
+        return {"error": err}
+    response = _post("/api/v1/replace-section", {
+        "taskId": task_id,
+        "sectionType": section_type,
+        "newLyrics": new_lyrics,
+        "callBackUrl": SUNO_CALLBACK_URL or "https://localhost/callback",
+    })
+    new_task_id = response.get("data", {}).get("taskId") if isinstance(response.get("data"), dict) else None
+    return {"task_id": new_task_id, "response": response}
+
+
+@mcp.tool()
+def boost_style(task_id: str, target_style: str) -> dict:
+    """Strengthen style adherence on an existing generated track.
+
+    Args:
+        task_id: The task_id of the track to enhance.
+        target_style: The style direction to boost toward.
+
+    Returns:
+        Dict with new task_id for the boosted track.
+    """
+    err = _require_api_key()
+    if err:
+        return {"error": err}
+    response = _post("/api/v1/boost-style", {
+        "taskId": task_id,
+        "targetStyle": target_style,
+        "callBackUrl": SUNO_CALLBACK_URL or "https://localhost/callback",
+    })
+    new_task_id = response.get("data", {}).get("taskId") if isinstance(response.get("data"), dict) else None
+    return {"task_id": new_task_id, "response": response}
+
+
+@mcp.tool()
+def convert_to_wav(task_id: str) -> dict:
+    """Convert a generated track's MP3 output to WAV format.
+
+    Args:
+        task_id: The task_id of the track to convert.
+
+    Returns:
+        Dict with new task_id for the conversion job.
+    """
+    err = _require_api_key()
+    if err:
+        return {"error": err}
+    response = _post("/api/v1/convert-to-wav", {
+        "taskId": task_id,
+        "callBackUrl": SUNO_CALLBACK_URL or "https://localhost/callback",
+    })
+    new_task_id = response.get("data", {}).get("taskId") if isinstance(response.get("data"), dict) else None
+    return {"task_id": new_task_id, "response": response}
+
+
+@mcp.tool()
+def create_music_video(task_id: str) -> dict:
+    """Generate a music video from a completed track.
+
+    Args:
+        task_id: The task_id of the track to visualize.
+
+    Returns:
+        Dict with new task_id for the video generation job.
+    """
+    err = _require_api_key()
+    if err:
+        return {"error": err}
+    response = _post("/api/v1/create-music-video", {
+        "taskId": task_id,
+        "callBackUrl": SUNO_CALLBACK_URL or "https://localhost/callback",
+    })
+    new_task_id = response.get("data", {}).get("taskId") if isinstance(response.get("data"), dict) else None
+    return {"task_id": new_task_id, "response": response}
+
+
+@mcp.tool()
+def generate_sounds(prompt: str, duration: int = 5, model: str = "V5") -> dict:
+    """Generate non-musical sound effects from a text description.
+
+    Args:
+        prompt: Description of the desired sound (e.g., "thunderstorm with distant wolves").
+        duration: Length in seconds. Default 5.
+        model: Model to use. Default V5.
+
+    Returns:
+        Dict with task_id for the sound generation job.
+    """
+    err = _require_api_key()
+    if err:
+        return {"error": err}
+    response = _post("/api/v1/generate-sounds", {
+        "prompt": prompt,
+        "duration": duration,
+        "model": model,
+        "callBackUrl": SUNO_CALLBACK_URL or "https://localhost/callback",
+    })
+    task_id = response.get("data", {}).get("taskId") if isinstance(response.get("data"), dict) else None
+    return {"task_id": task_id, "response": response}
+
+
 @mcp.tool()
 def list_endpoints() -> dict:
     """List all Suno API endpoints available via sunoapi.org with brief descriptions.

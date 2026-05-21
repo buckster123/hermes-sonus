@@ -121,3 +121,77 @@ class TestDownloadAudio:
         result = download_audio("https://example.com/audio.mp3", output)
         assert result == output
         assert (tmp_path / "test.mp3").read_bytes() == b"fake audio data"
+
+
+class TestAdvancedEditing:
+    @patch("hermes_sonus.music.suno.requests.request")
+    def test_separate_stems(self, mock_request, monkeypatch):
+        monkeypatch.setenv("SUNO_API_KEY", "test_key")
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"code": 200, "data": {"taskId": "stem_task_1"}}
+        mock_request.return_value = mock_response
+
+        from hermes_sonus.music.suno import separate_stems
+        result = separate_stems("task_abc", track_index=0)
+        assert result == "stem_task_1"
+
+    @patch("hermes_sonus.music.suno.requests.request")
+    def test_replace_section(self, mock_request, monkeypatch):
+        monkeypatch.setenv("SUNO_API_KEY", "test_key")
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"code": 200, "data": {"taskId": "replace_task_1"}}
+        mock_request.return_value = mock_response
+
+        from hermes_sonus.music.suno import replace_section
+        result = replace_section("task_abc", section_type="chorus", new_lyrics="New chorus line")
+        assert result == "replace_task_1"
+
+    @patch("hermes_sonus.music.suno.requests.request")
+    def test_boost_style(self, mock_request, monkeypatch):
+        monkeypatch.setenv("SUNO_API_KEY", "test_key")
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"code": 200, "data": {"taskId": "boost_task_1"}}
+        mock_request.return_value = mock_response
+
+        from hermes_sonus.music.suno import boost_style
+        result = boost_style("task_abc", target_style="ambient electronic")
+        assert result == "boost_task_1"
+
+    @patch("hermes_sonus.music.suno.requests.request")
+    def test_convert_to_wav(self, mock_request, monkeypatch):
+        monkeypatch.setenv("SUNO_API_KEY", "test_key")
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"code": 200, "data": {"taskId": "wav_task_1"}}
+        mock_request.return_value = mock_response
+
+        from hermes_sonus.music.suno import convert_to_wav
+        result = convert_to_wav("task_abc")
+        assert result == "wav_task_1"
+
+    @patch("hermes_sonus.music.suno.requests.request")
+    def test_create_music_video(self, mock_request, monkeypatch):
+        monkeypatch.setenv("SUNO_API_KEY", "test_key")
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"code": 200, "data": {"taskId": "video_task_1"}}
+        mock_request.return_value = mock_response
+
+        from hermes_sonus.music.suno import create_music_video
+        result = create_music_video("task_abc")
+        assert result == "video_task_1"
+
+    @patch("hermes_sonus.music.suno.requests.request")
+    def test_generate_sounds(self, mock_request, monkeypatch):
+        monkeypatch.setenv("SUNO_API_KEY", "test_key")
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"code": 200, "data": {"taskId": "sound_task_1"}}
+        mock_request.return_value = mock_response
+
+        from hermes_sonus.music.suno import generate_sounds
+        result = generate_sounds("thunderstorm with distant wolves", duration=10)
+        assert result == "sound_task_1"

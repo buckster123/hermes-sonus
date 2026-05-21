@@ -754,6 +754,98 @@ def _handle_music_clone_voice_create(args: dict, **kw) -> str:
         return json.dumps({"success": False, "error": str(e)})
 
 
+def _handle_music_separate_stems(args: dict, **kw) -> str:
+    from . import suno
+    try:
+        task_id = suno.separate_stems(
+            task_id=args.get("task_id", ""),
+            track_index=args.get("track_index", 0),
+        )
+        return json.dumps({
+            "success": True,
+            "new_task_id": task_id,
+            "message": f"Stem separation started. Poll with music_status('{task_id}').",
+        })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def _handle_music_replace_section(args: dict, **kw) -> str:
+    from . import suno
+    try:
+        task_id = suno.replace_section(
+            task_id=args.get("task_id", ""),
+            section_type=args.get("section_type", ""),
+            new_lyrics=args.get("new_lyrics", ""),
+        )
+        return json.dumps({
+            "success": True,
+            "new_task_id": task_id,
+            "message": f"Section replacement started. Poll with music_status('{task_id}').",
+        })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def _handle_music_boost_style(args: dict, **kw) -> str:
+    from . import suno
+    try:
+        task_id = suno.boost_style(
+            task_id=args.get("task_id", ""),
+            target_style=args.get("target_style", ""),
+        )
+        return json.dumps({
+            "success": True,
+            "new_task_id": task_id,
+            "message": f"Style boost started. Poll with music_status('{task_id}').",
+        })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def _handle_music_convert_to_wav(args: dict, **kw) -> str:
+    from . import suno
+    try:
+        task_id = suno.convert_to_wav(task_id=args.get("task_id", ""))
+        return json.dumps({
+            "success": True,
+            "new_task_id": task_id,
+            "message": f"WAV conversion started. Poll with music_status('{task_id}').",
+        })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def _handle_music_create_video(args: dict, **kw) -> str:
+    from . import suno
+    try:
+        task_id = suno.create_music_video(task_id=args.get("task_id", ""))
+        return json.dumps({
+            "success": True,
+            "new_task_id": task_id,
+            "message": f"Music video generation started. Poll with music_status('{task_id}').",
+        })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def _handle_music_generate_sounds(args: dict, **kw) -> str:
+    from . import suno
+    try:
+        task_id = suno.generate_sounds(
+            prompt=args.get("prompt", ""),
+            duration=args.get("duration", 5),
+            model=args.get("model", "V5"),
+        )
+        return json.dumps({
+            "success": True,
+            "task_id": task_id,
+            "message": f"Sound generation started. Poll with music_status('{task_id}').",
+        })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
 # ---------------------------------------------------------------------------
 # Tool schemas (OpenAI format for Hermes)
 # ---------------------------------------------------------------------------
@@ -1184,6 +1276,78 @@ TOOL_SCHEMAS = {
             "required": [],
         },
     },
+    "music_separate_stems": {
+        "name": "music_separate_stems",
+        "description": "Separate vocals from instruments for a completed track.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "The task_id of the completed track to process"},
+                "track_index": {"type": "integer", "description": "Which variant to process (0 or 1). Default 0."},
+            },
+            "required": ["task_id"],
+        },
+    },
+    "music_replace_section": {
+        "name": "music_replace_section",
+        "description": "Replace a section in a generated track with new lyrics.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "The task_id of the track to edit"},
+                "section_type": {"type": "string", "description": "Section to replace: verse, chorus, bridge, etc."},
+                "new_lyrics": {"type": "string", "description": "The new lyrics for that section"},
+            },
+            "required": ["task_id", "section_type", "new_lyrics"],
+        },
+    },
+    "music_boost_style": {
+        "name": "music_boost_style",
+        "description": "Strengthen style adherence on an existing generated track.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "The task_id of the track to enhance"},
+                "target_style": {"type": "string", "description": "The style direction to boost toward"},
+            },
+            "required": ["task_id", "target_style"],
+        },
+    },
+    "music_convert_to_wav": {
+        "name": "music_convert_to_wav",
+        "description": "Convert a generated track's MP3 output to WAV format.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "The task_id of the track to convert"},
+            },
+            "required": ["task_id"],
+        },
+    },
+    "music_create_video": {
+        "name": "music_create_video",
+        "description": "Generate a music video from a completed track.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "The task_id of the track to visualize"},
+            },
+            "required": ["task_id"],
+        },
+    },
+    "music_generate_sounds": {
+        "name": "music_generate_sounds",
+        "description": "Generate non-musical sound effects from a text description.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string", "description": "Description of the desired sound"},
+                "duration": {"type": "integer", "description": "Length in seconds. Default 5."},
+                "model": {"type": "string", "enum": ["V4", "V4_5", "V4_5PLUS", "V4_5ALL", "V5", "V5_5"], "description": "Model to use"},
+            },
+            "required": ["prompt"],
+        },
+    },
 }
 
 # Handler dispatch map
@@ -1206,6 +1370,12 @@ TOOL_HANDLERS = {
     "music_clone_voice_create": _handle_music_clone_voice_create,
     "music_check_credits": _handle_music_check_credits,
     "music_generate_album": _handle_music_generate_album,
+    "music_separate_stems": _handle_music_separate_stems,
+    "music_replace_section": _handle_music_replace_section,
+    "music_boost_style": _handle_music_boost_style,
+    "music_convert_to_wav": _handle_music_convert_to_wav,
+    "music_create_video": _handle_music_create_video,
+    "music_generate_sounds": _handle_music_generate_sounds,
 }
 
 
