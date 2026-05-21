@@ -488,7 +488,7 @@ def extend_track(
     if title:
         payload["title"] = title
 
-    response = _post("/api/v1/extend", payload)
+    response = _post("/api/v1/generate/extend", payload)
     new_task_id = None
     if response.get("code") == 200 and isinstance(response.get("data"), dict):
         new_task_id = response["data"].get("taskId")
@@ -521,7 +521,7 @@ def generate_lyrics(prompt: str, callback_url: str = "") -> dict:
         return {"error": "callback_url required"}
 
     response = _post(
-        "/api/v1/generate-lyrics",
+        "/api/v1/lyrics",
         {"prompt": prompt, "callBackUrl": callback},
     )
     task_id = None
@@ -552,7 +552,7 @@ def clone_voice_validate(callback_url: str = "") -> dict:
     if not callback:
         return {"error": "callback_url required"}
 
-    response = _post("/api/v1/suno-voice-validate", {"callBackUrl": callback})
+    response = _post("/api/v1/voice/validate", {"callBackUrl": callback})
     return {
         "task_id": response.get("data", {}).get("taskId") if isinstance(response.get("data"), dict) else None,
         "next_step": (
@@ -592,7 +592,7 @@ def clone_voice_create(
         return {"error": "callback_url required"}
 
     response = _post(
-        "/api/v1/suno-voice-generate",
+        "/api/v1/voice/generate",
         {
             "audioUrl": audio_url,
             "taskId": task_id,
@@ -650,7 +650,7 @@ def separate_stems(task_id: str, track_index: int = 0) -> dict:
     err = _require_api_key()
     if err:
         return {"error": err}
-    response = _post("/api/v1/separate-vocals", {
+    response = _post("/api/v1/vocal-removal/generate", {
         "taskId": task_id,
         "trackIndex": track_index,
         "callBackUrl": SUNO_CALLBACK_URL or "https://localhost/callback",
@@ -674,7 +674,7 @@ def replace_section(task_id: str, section_type: str, new_lyrics: str) -> dict:
     err = _require_api_key()
     if err:
         return {"error": err}
-    response = _post("/api/v1/replace-section", {
+    response = _post("/api/v1/generate/replace-section", {
         "taskId": task_id,
         "sectionType": section_type,
         "newLyrics": new_lyrics,
@@ -698,7 +698,7 @@ def boost_style(task_id: str, target_style: str) -> dict:
     err = _require_api_key()
     if err:
         return {"error": err}
-    response = _post("/api/v1/boost-style", {
+    response = _post("/api/v1/style/generate", {
         "taskId": task_id,
         "targetStyle": target_style,
         "callBackUrl": SUNO_CALLBACK_URL or "https://localhost/callback",
@@ -720,7 +720,7 @@ def convert_to_wav(task_id: str) -> dict:
     err = _require_api_key()
     if err:
         return {"error": err}
-    response = _post("/api/v1/convert-to-wav", {
+    response = _post("/api/v1/wav/generate", {
         "taskId": task_id,
         "callBackUrl": SUNO_CALLBACK_URL or "https://localhost/callback",
     })
@@ -741,7 +741,7 @@ def create_music_video(task_id: str) -> dict:
     err = _require_api_key()
     if err:
         return {"error": err}
-    response = _post("/api/v1/create-music-video", {
+    response = _post("/api/v1/mp4/generate", {
         "taskId": task_id,
         "callBackUrl": SUNO_CALLBACK_URL or "https://localhost/callback",
     })
@@ -764,7 +764,7 @@ def generate_sounds(prompt: str, duration: int = 5, model: str = "V5") -> dict:
     err = _require_api_key()
     if err:
         return {"error": err}
-    response = _post("/api/v1/generate-sounds", {
+    response = _post("/api/v1/generate/sounds", {
         "prompt": prompt,
         "duration": duration,
         "model": model,
@@ -787,43 +787,50 @@ def list_endpoints() -> dict:
     return {
         "music_generation": {
             "POST /api/v1/generate": "Generate new music (handled by generate_song tool)",
-            "POST /api/v1/extend": "Extend a track (handled by extend_track tool)",
-            "POST /api/v1/upload-and-cover": "Upload audio and generate a cover",
-            "POST /api/v1/upload-and-extend": "Upload audio and extend it",
-            "POST /api/v1/add-instrumental": "Add instrumental layers to a vocal-only base",
-            "POST /api/v1/add-vocals": "Add vocals to an instrumental base",
-            "GET /api/v1/get-music-details": "Poll task status (handled by check_status)",
-            "POST /api/v1/get-timestamped-lyrics": "Retrieve timed lyric data",
-            "POST /api/v1/boost-style": "Strengthen style adherence on an existing track",
-            "POST /api/v1/cover-suno": "Generate a cover via Suno's Cover feature",
-            "POST /api/v1/replace-section": "Swap a specific section in a generated track",
-            "POST /api/v1/generate-persona": "Create a persona from an existing track",
-            "POST /api/v1/generate-mashup": "Generate a mashup of two tracks",
+            "POST /api/v1/generate/extend": "Extend a track (handled by extend_track tool)",
+            "POST /api/v1/generate/upload-cover": "Upload audio and generate a cover",
+            "POST /api/v1/generate/upload-extend": "Upload audio and extend it",
+            "POST /api/v1/generate/add-instrumental": "Add instrumental layers to a vocal-only base",
+            "POST /api/v1/generate/add-vocals": "Add vocals to an instrumental base",
+            "GET /api/v1/generate/record-info": "Poll task status (handled by check_status)",
+            "POST /api/v1/generate/get-timestamped-lyrics": "Retrieve timed lyric data",
+            "POST /api/v1/style/generate": "Strengthen style adherence on an existing track",
+            "POST /api/v1/suno/cover/generate": "Generate a cover via Suno's Cover feature",
+            "POST /api/v1/generate/replace-section": "Swap a specific section in a generated track",
+            "POST /api/v1/generate/generate-persona": "Create a persona from an existing track",
+            "POST /api/v1/generate/mashup": "Generate a mashup of two tracks",
+            "POST /api/v1/generate/sounds": "Generate non-musical sound effects",
         },
         "suno_voice_v5_v5_5_only": {
-            "POST /api/v1/suno-voice-validate": "Generate verification phrase (handled by clone_voice_validate)",
-            "POST /api/v1/suno-voice-generate": "Create voice clone (handled by clone_voice_create)",
-            "GET /api/v1/suno-voice-record-info": "Get voice record details",
-            "POST /api/v1/suno-voice-check-voice": "Check voice availability",
+            "POST /api/v1/voice/validate": "Generate verification phrase (handled by clone_voice_validate)",
+            "POST /api/v1/voice/generate": "Create voice clone (handled by clone_voice_create)",
+            "GET /api/v1/voice/record-info": "Get voice record details",
+            "POST /api/v1/voice/check-voice": "Check voice availability",
         },
         "lyrics": {
-            "POST /api/v1/generate-lyrics": "Generate lyrics only (handled by generate_lyrics tool)",
+            "POST /api/v1/lyrics": "Generate lyrics only (handled by generate_lyrics tool)",
+            "GET /api/v1/lyrics/record-info": "Poll lyrics generation status",
         },
         "post_processing": {
-            "POST /api/v1/convert-to-wav": "Convert MP3 to WAV",
-            "POST /api/v1/separate-vocals": "Stem separation (vocals from instruments)",
-            "POST /api/v1/generate-midi": "Generate MIDI from audio",
+            "POST /api/v1/wav/generate": "Convert MP3 to WAV",
+            "GET /api/v1/wav/record-info": "Poll WAV conversion status",
+            "POST /api/v1/vocal-removal/generate": "Stem separation (vocals from instruments)",
+            "GET /api/v1/vocal-removal/record-info": "Poll stem separation status",
+            "POST /api/v1/midi/generate": "Generate MIDI from audio",
+            "GET /api/v1/midi/record-info": "Poll MIDI generation status",
         },
         "music_video": {
-            "POST /api/v1/create-music-video": "Generate a music video from a track",
+            "POST /api/v1/mp4/generate": "Generate a music video from a track",
+            "GET /api/v1/mp4/record-info": "Poll music video generation status",
         },
         "account": {
-            "GET /api/v1/get-remaining-credits": "Check credit balance (handled by check_credits)",
+            "GET /api/v1/generate/credit": "Check credit balance (handled by check_credits)",
         },
         "file_upload": {
-            "POST /api/v1/upload-base64": "Upload a file as base64",
-            "POST /api/v1/upload-stream": "Upload a file as stream",
-            "POST /api/v1/upload-url": "Upload a file from a URL",
+            "POST /api/file-base64-upload": "Upload a file as base64 (may require separate file-upload API base URL)",
+            "POST /api/file-stream-upload": "Upload a file as stream (may require separate file-upload API base URL)",
+            "POST /api/file-url-upload": "Upload a file from a URL (may require separate file-upload API base URL)",
+            "note": "File upload endpoints verified 404 on api.sunoapi.org; may be on a separate subdomain or not available on all providers.",
         },
         "documentation_url": "https://docs.sunoapi.org/",
     }

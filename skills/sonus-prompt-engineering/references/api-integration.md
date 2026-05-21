@@ -112,44 +112,49 @@ Useful to know what's available beyond `generate`. Each has its own request form
 ### Music generation
 - `POST /api/v1/generate` — generate new music
 - `GET /api/v1/generate/record-info?taskId=<id>` — poll task status
-- `POST /api/v1/extend` — extend a track
-- `POST /api/v1/upload-and-cover` — upload audio and generate a cover
-- `POST /api/v1/upload-and-extend` — upload audio and extend it
-- `POST /api/v1/add-instrumental` — add instrumental layers to a vocal-only base
-- `POST /api/v1/add-vocals` — add vocals to an instrumental base
-- `POST /api/v1/get-timestamped-lyrics` — retrieve timed lyric data
-- `POST /api/v1/boost-style` — strengthen style adherence on an existing track
-- `POST /api/v1/cover-suno` — generate a cover via Suno's Cover feature
-- `POST /api/v1/replace-section` — swap a specific section in a generated track
-- `POST /api/v1/generate-persona` — create a persona from an existing track
-- `POST /api/v1/generate-mashup` — generate a mashup of two tracks
+- `POST /api/v1/generate/extend` — extend a track
+- `POST /api/v1/generate/upload-cover` — upload audio and generate a cover
+- `POST /api/v1/generate/upload-extend` — upload audio and extend it
+- `POST /api/v1/generate/add-instrumental` — add instrumental layers to a vocal-only base
+- `POST /api/v1/generate/add-vocals` — add vocals to an instrumental base
+- `POST /api/v1/generate/get-timestamped-lyrics` — retrieve timed lyric data
+- `POST /api/v1/style/generate` — strengthen style adherence on an existing track
+- `POST /api/v1/suno/cover/generate` — generate a cover via Suno's Cover feature
+- `POST /api/v1/generate/replace-section` — swap a specific section in a generated track
+- `POST /api/v1/generate/generate-persona` — create a persona from an existing track
+- `POST /api/v1/generate/mashup` — generate a mashup of two tracks
 
 ### Suno Voice (v5/v5.5 only)
-- `POST /api/v1/suno-voice-validate` — generate a verification phrase
-- `GET /api/v1/suno-voice-validate-info` — fetch the verification phrase
-- `POST /api/v1/suno-voice-generate` — create a custom voice from a recording
-- `GET /api/v1/suno-voice-record-info` — get voice record details
+- `POST /api/v1/voice/validate` — generate a verification phrase
+- `GET /api/v1/voice/validate-info` — fetch the verification phrase
+- `POST /api/v1/voice/generate` — create a custom voice from a recording
+- `GET /api/v1/voice/record-info` — get voice record details
 
 ### Lyrics
-- `POST /api/v1/generate-lyrics` — generate lyrics independently of music
-- `GET /api/v1/generate/record-info?taskId=<id>` — poll lyrics generation
+- `POST /api/v1/lyrics` — generate lyrics independently of music
+- `GET /api/v1/lyrics/record-info?taskId=<id>` — poll lyrics generation status
 
 ### Sounds / WAV / Stems / MIDI
-- `POST /api/v1/generate-sounds` — generate non-musical sound effects
-- `POST /api/v1/convert-to-wav` — convert MP3 output to WAV
-- `POST /api/v1/separate-vocals` — stem separation (vocals from instruments)
-- `POST /api/v1/generate-midi` — generate MIDI from audio
+- `POST /api/v1/generate/sounds` — generate non-musical sound effects
+- `POST /api/v1/wav/generate` — convert MP3 output to WAV
+- `GET /api/v1/wav/record-info?taskId=<id>` — poll WAV conversion status
+- `POST /api/v1/vocal-removal/generate` — stem separation (vocals from instruments)
+- `GET /api/v1/vocal-removal/record-info?taskId=<id>` — poll stem separation status
+- `POST /api/v1/midi/generate` — generate MIDI from audio
+- `GET /api/v1/midi/record-info?taskId=<id>` — poll MIDI generation status
 
 ### Music video
-- `POST /api/v1/create-music-video` — generate a music video from a track
+- `POST /api/v1/mp4/generate` — generate a music video from a track
+- `GET /api/v1/mp4/record-info?taskId=<id>` — poll music video generation status
 
 ### Account
 - `GET /api/v1/generate/credit` — check account balance
 
 ### File upload
-- `POST /api/v1/upload-base64` — upload a file as base64
-- `POST /api/v1/upload-stream` — upload a file as stream
-- `POST /api/v1/upload-url` — upload a file from a URL
+> **Note:** File upload endpoints (`/api/file-*-upload`) verified 404 on `api.sunoapi.org`. They may reside on a separate subdomain or not be available on all providers.
+- `POST /api/file-base64-upload` — upload a file as base64
+- `POST /api/file-stream-upload` — upload a file as stream
+- `POST /api/file-url-upload` — upload a file from a URL
 
 ## Authentication
 
@@ -175,7 +180,7 @@ Generation is async. The callback URL receives three sequential POST notificatio
 2. `first` — first track variant complete (audio available)
 3. `complete` — all tracks (Suno returns 2 variants per request) complete
 
-Alternative: poll `GET /api/v1/get-music-details?taskId=<id>` instead of relying on callbacks. Useful for local dev or when you don't want to expose a webhook endpoint.
+Alternative: poll `GET /api/v1/generate/record-info?taskId=<id>` instead of relying on callbacks. Useful for local dev or when you don't want to expose a webhook endpoint.
 
 **Helper scripts in this skill:**
 
