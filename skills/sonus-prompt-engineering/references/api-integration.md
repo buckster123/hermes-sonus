@@ -107,6 +107,8 @@ Notes on the translation:
 
 Useful to know what's available beyond `generate`. Each has its own request format — consult `https://docs.sunoapi.org/` for parameter detail.
 
+> **Provider variance warning:** Third-party sunoapi.org instances may strip certain endpoints. The generation endpoint (`POST /api/v1/generate`) is the most reliable. Polling (`GET /api/v1/get-music-details`) and credits (`GET /api/v1/get-remaining-credits`) are sometimes unavailable — rely on your provider's dashboard or callback URL for status.
+
 ### Music generation
 - `POST /api/v1/generate` — generate new music
 - `POST /api/v1/extend` — extend an existing track
