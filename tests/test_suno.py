@@ -2,6 +2,7 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
+import requests
 
 from hermes_sonus.music.suno import (
     _get_api_key,
@@ -25,11 +26,12 @@ class TestApiKey:
 
 class TestModelLimits:
     def test_v5_limits(self):
-        assert MODEL_LIMITS["V5"]["prompt"] == 5000
+        assert MODEL_LIMITS["V5"]["lyrics"] == 5000
         assert MODEL_LIMITS["V5"]["style"] == 1000
 
-    def test_v3_5_limits(self):
-        assert MODEL_LIMITS["V3_5"]["prompt"] == 3000
+    def test_v4_limits(self):
+        assert MODEL_LIMITS["V4"]["lyrics"] == 3000
+        assert MODEL_LIMITS["V4"]["style"] == 200
 
 
 class TestSubmitGeneration:
@@ -52,10 +54,10 @@ class TestSubmitGeneration:
         monkeypatch.setenv("SUNO_API_KEY", "test_key")
         mock_response = MagicMock()
         mock_response.status_code = 500
-        mock_response.text = "Internal Server Error"
+        mock_response.raise_for_status.side_effect = requests.HTTPError("HTTP 500")
         mock_request.return_value = mock_response
 
-        with pytest.raises(Exception, match="HTTP 500"):
+        with pytest.raises(requests.HTTPError, match="HTTP 500"):
             submit_generation(prompt="test")
 
 
@@ -68,7 +70,6 @@ class TestPollCompletion:
         mock_response.json.return_value = {
             "code": 200,
             "data": {
-                "status": "SUCCESS",
                 "response": {
                     "sunoData": [
                         {
@@ -104,7 +105,7 @@ class TestPollCompletion:
 
         result = poll_completion("suno_task_abc", max_wait=5)
         assert result["success"] is False
-        assert "Content policy" in result["error"]
+        assert "failed" in result["error"]
 
 
 class TestDownloadAudio:

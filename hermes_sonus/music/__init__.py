@@ -444,6 +444,93 @@ def _cleanup_file(path: str):
         pass
 
 
+def _handle_music_check_credits(args: dict, **kw) -> str:
+    from . import suno
+    try:
+        result = suno.check_credits()
+        data = result.get("data", {})
+        return json.dumps({
+            "success": True,
+            "credits_remaining": data.get("remaining", "unknown"),
+            "credits_total": data.get("total", "unknown"),
+            "raw": result,
+        })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def _handle_music_extend(args: dict, **kw) -> str:
+    from . import suno
+    try:
+        task_id = suno.submit_extend(
+            task_id=args.get("task_id", ""),
+            audio_id=args.get("audio_id", ""),
+            prompt=args.get("prompt", ""),
+            style=args.get("style", ""),
+            title=args.get("title", ""),
+            continue_at=args.get("continue_at", 0),
+            model=args.get("model", "V5"),
+        )
+        return json.dumps({
+            "success": True,
+            "new_task_id": task_id,
+            "message": f"Extension started. Poll with music_status('{task_id}').",
+        })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def _handle_music_generate_lyrics(args: dict, **kw) -> str:
+    from . import suno
+    try:
+        task_id = suno.submit_lyrics(prompt=args.get("prompt", ""))
+        return json.dumps({
+            "success": True,
+            "task_id": task_id,
+            "message": f"Lyrics generation started. Poll with music_status('{task_id}').",
+        })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def _handle_music_clone_voice_validate(args: dict, **kw) -> str:
+    from . import suno
+    try:
+        task_id = suno.clone_voice_validate()
+        return json.dumps({
+            "success": True,
+            "task_id": task_id,
+            "message": (
+                "Voice cloning validation started. "
+                f"Poll with music_status('{task_id}') to get the verification phrase. "
+                "Have the person record themselves saying the phrase + a voice sample, "
+                "upload it publicly, then call music_clone_voice_create."
+            ),
+        })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+def _handle_music_clone_voice_create(args: dict, **kw) -> str:
+    from . import suno
+    try:
+        task_id = suno.clone_voice_create(
+            audio_url=args.get("audio_url", ""),
+            task_id=args.get("task_id", ""),
+        )
+        return json.dumps({
+            "success": True,
+            "task_id": task_id,
+            "message": (
+                "Voice clone creation started. "
+                f"Poll with music_status('{task_id}') to get the voiceId. "
+                "Use it as personaId with personaModel='voice_persona' in music_generate."
+            ),
+        })
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
 # ---------------------------------------------------------------------------
 # Tool schemas (OpenAI format for Hermes)
 # ---------------------------------------------------------------------------
@@ -473,12 +560,24 @@ TOOL_SCHEMAS = {
                 },
                 "model": {
                     "type": "string",
-                    "enum": ["V3_5", "V4", "V4_5", "V5"],
-                    "description": "Suno model version. V5 is newest and best quality.",
+                    "enum": ["V4", "V4_5", "V4_5PLUS", "V4_5ALL", "V5", "V5_5"],
+                    "description": "Suno model version. V5 is default. V5_5 adds voice cloning.",
                 },
                 "is_instrumental": {
                     "type": "boolean",
                     "description": "True for instrumental (no vocals), False for AI vocals",
+                },
+                "exclude_styles": {
+                    "type": "string",
+                    "description": "Styles to exclude. Can use double negatives for ironic enforcement.",
+                },
+                "weirdness_pct": {
+                    "type": "number",
+                    "description": "Creative deviation 0-100. Default 50.",
+                },
+                "style_pct": {
+                    "type": "number",
+                    "description": "Style adherence 0-100. Default 50.",
                 },
                 "blocking": {
                     "type": "boolean",
@@ -744,7 +843,7 @@ TOOL_SCHEMAS = {
                 },
                 "model": {
                     "type": "string",
-                    "enum": ["V3_5", "V4", "V4_5", "V5"],
+                    "enum": ["V4", "V4_5", "V4_5PLUS", "V4_5ALL", "V5", "V5_5"],
                     "description": "Suno model version (default V5)",
                 },
                 "blocking": {
@@ -757,6 +856,62 @@ TOOL_SCHEMAS = {
                 },
             },
             "required": ["midi_file", "style", "title"],
+        },
+    },
+    "music_extend": {
+        "name": "music_extend",
+        "description": "Extend an existing generated track with additional content.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "Original task_id"},
+                "audio_id": {"type": "string", "description": "Audio ID of the specific track variant to extend"},
+                "prompt": {"type": "string", "description": "Optional lyrics for the extension"},
+                "style": {"type": "string", "description": "Optional style override"},
+                "title": {"type": "string", "description": "Optional title for extended track"},
+                "continue_at": {"type": "integer", "description": "Seconds into original to start from (0 = end)"},
+                "model": {"type": "string", "enum": ["V4", "V4_5", "V4_5PLUS", "V4_5ALL", "V5", "V5_5"], "description": "Model for extension"},
+            },
+            "required": ["task_id", "audio_id"],
+        },
+    },
+    "music_generate_lyrics": {
+        "name": "music_generate_lyrics",
+        "description": "Generate lyrics independently of music generation.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string", "description": "Short description of desired lyrical content"},
+            },
+            "required": ["prompt"],
+        },
+    },
+    "music_clone_voice_validate": {
+        "name": "music_clone_voice_validate",
+        "description": "Start voice cloning workflow. Returns a task_id and verification phrase.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    "music_clone_voice_create": {
+        "name": "music_clone_voice_create",
+        "description": "Create a voice clone from a recording after validation.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "audio_url": {"type": "string", "description": "Public URL to the verification recording"},
+                "task_id": {"type": "string", "description": "task_id from music_clone_voice_validate"},
+            },
+            "required": ["audio_url", "task_id"],
+        },
+    },
+    "music_check_credits": {
+        "name": "music_check_credits",
+        "description": "Check remaining Suno API credits.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
         },
     },
 }
@@ -775,6 +930,11 @@ TOOL_HANDLERS = {
     "music_delete": _handle_music_delete,
     "midi_create": _handle_midi_create,
     "music_compose": _handle_music_compose,
+    "music_extend": _handle_music_extend,
+    "music_generate_lyrics": _handle_music_generate_lyrics,
+    "music_clone_voice_validate": _handle_music_clone_voice_validate,
+    "music_clone_voice_create": _handle_music_clone_voice_create,
+    "music_check_credits": _handle_music_check_credits,
 }
 
 

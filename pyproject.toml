@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-sonus"
-version = "1.0.0"
-description = "Sonic alchemy for Hermes Agent — Suno music generation, MIDI composition, OpenBCI felt-experience EEG, and a complete dashboard surface."
+version = "2.0.0"
+description = "Sonic alchemy for Hermes Agent — Suno AI music generation, MIDI composition, OpenBCI felt-experience EEG, and a complete dashboard surface. Dual-mode with MCP server."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{name = "buckster123"}]
-keywords = ["hermes", "agent", "suno", "music", "eeg", "openbci", "bci", "midi", "ai-music", "felt-experience"]
+keywords = ["hermes", "agent", "suno", "music", "eeg", "openbci", "bci", "midi", "ai-music", "felt-experience", "mcp"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -32,14 +32,20 @@ dependencies = [
 midi = ["midiutil>=1.2"]
 hardware = ["brainflow>=5.0"]
 retry = ["tenacity>=8.0"]
-all = ["midiutil>=1.2", "brainflow>=5.0", "tenacity>=8.0"]
+mcp = ["mcp>=1.0", "pyyaml>=6.0"]
+all = ["midiutil>=1.2", "brainflow>=5.0", "tenacity>=8.0", "mcp>=1.0", "pyyaml>=6.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov",
     "responses>=0.23",
     "midiutil>=1.2",
     "tenacity>=8.0",
+    "mcp>=1.0",
+    "pyyaml>=6.0",
 ]
+
+[project.scripts]
+hermes-sonus-mcp = "hermes_sonus.mcp.server:main"
 
 [project.urls]
 Homepage = "https://github.com/buckster123/hermes-sonus"

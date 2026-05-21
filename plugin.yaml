@@ -1,6 +1,6 @@
 name: hermes-sonus
-version: 1.0.0
-description: "Sonic alchemy for Hermes — Suno AI music generation, MIDI composition, music library, plus OpenBCI EEG felt-experience sensing. Pairs with the Trismegistus dashboard theme."
+version: 2.0.0
+description: "Sonic alchemy for Hermes — Suno AI music generation (v5/v5.5), MIDI composition, music library, voice cloning, and OpenBCI EEG felt-experience sensing. Dual-mode: native tools + MCP server."
 author: buckster123
 kind: standalone
 requires_env:
@@ -21,6 +21,11 @@ provides_tools:
   - music_delete
   - midi_create
   - music_compose
+  - music_extend
+  - music_generate_lyrics
+  - music_clone_voice_validate
+  - music_clone_voice_create
+  - music_check_credits
   # eeg toolset
   - eeg_connect
   - eeg_disconnect
@@ -30,4 +35,13 @@ provides_tools:
   - eeg_experience_get
   - eeg_calibrate_baseline
   - eeg_list_sessions
+provides_mcp_servers:
+  - name: sonus
+    description: "Suno API MCP server — stdio or SSE transport. Exposes 10+ tools for Suno generation, polling, downloading, batch albums, voice cloning, and more."
+    entrypoint: "hermes_sonus.mcp.server:main"
+    env:
+      - SUNO_API_KEY
+      - SUNO_CALLBACK_URL
+      - SUNO_BASE_URL
+      - SUNO_DOWNLOAD_DIR
 provides_hooks: []
