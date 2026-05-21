@@ -18,7 +18,10 @@ SUNO_CALLBACK_URL = os.environ.get("SUNO_CALLBACK_URL", "").strip()
 
 
 def _auth_header() -> dict[str, str]:
-    return {"Authorization": f"Bearer {SUNO_API_KEY}"}
+    return {
+        "Authorization": f"Bearer {SUNO_API_KEY}",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    }
 
 
 def _require_api_key() -> str | None:

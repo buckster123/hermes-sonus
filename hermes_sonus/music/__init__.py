@@ -448,13 +448,7 @@ def _handle_music_check_credits(args: dict, **kw) -> str:
     from . import suno
     try:
         result = suno.check_credits()
-        data = result.get("data", {})
-        return json.dumps({
-            "success": True,
-            "credits_remaining": data.get("remaining", "unknown"),
-            "credits_total": data.get("total", "unknown"),
-            "raw": result,
-        })
+        return json.dumps(result)
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
 

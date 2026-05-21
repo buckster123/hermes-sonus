@@ -360,8 +360,26 @@ def clone_voice_create(audio_url: str, task_id: str) -> str:
 def check_credits() -> Dict[str, Any]:
     """Check remaining API credits."""
     response = _api_call("GET", f"{SUNO_API_BASE}/get-remaining-credits", headers=_headers())
+    # Handle 404 gracefully — credits endpoint may be stripped by provider
+    if response.status_code == 404:
+        return {
+            "success": True,
+            "credits_remaining": "unknown",
+            "credits_total": "unknown",
+            "note": (
+                "The credits endpoint is not exposed by this sunoapi.org instance. "
+                "Generation works; credit queries are provider-dependent."
+            ),
+        }
     response.raise_for_status()
-    return response.json()
+    result = response.json()
+    data = result.get("data", {})
+    return {
+        "success": True,
+        "credits_remaining": data.get("remaining", "unknown"),
+        "credits_total": data.get("total", "unknown"),
+        "raw": result,
+    }
 
 
 # ---------------------------------------------------------------------------

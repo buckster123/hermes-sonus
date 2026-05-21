@@ -615,12 +615,22 @@ def check_credits() -> dict:
     """Check remaining API credits on the sunoapi.org account.
 
     Returns:
-        Dict with credit balance.
+        Dict with credit balance (when supported by the API provider).
     """
     err = _require_api_key()
     if err:
         return {"error": err}
-    return _get("/api/v1/get-remaining-credits")
+    result = _get("/api/v1/get-remaining-credits")
+    if result.get("status") == 404 or result.get("code") == 404:
+        return {
+            "available": "unknown",
+            "note": (
+                "The credits endpoint is not exposed by this sunoapi.org instance. "
+                "Generation works; credit queries are provider-dependent. "
+                "Check your dashboard at https://sunoapi.org directly."
+            ),
+        }
+    return result
 
 
 # --- Advanced audio editing (v2.0 Phase C) ---
