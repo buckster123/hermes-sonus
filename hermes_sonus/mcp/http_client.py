@@ -14,6 +14,7 @@ from typing import Any
 
 SUNO_API_KEY = os.environ.get("SUNO_API_KEY", "").strip()
 SUNO_BASE_URL = os.environ.get("SUNO_BASE_URL", "https://api.sunoapi.org").rstrip("/")
+SUNO_CALLBACK_URL = os.environ.get("SUNO_CALLBACK_URL", "").strip()
 
 
 def _auth_header() -> dict[str, str]:

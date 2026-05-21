@@ -26,6 +26,13 @@ provides_tools:
   - music_clone_voice_validate
   - music_clone_voice_create
   - music_check_credits
+  - music_generate_album
+  - music_separate_stems
+  - music_replace_section
+  - music_boost_style
+  - music_convert_to_wav
+  - music_create_video
+  - music_generate_sounds
   # eeg toolset
   - eeg_connect
   - eeg_disconnect
@@ -37,7 +44,7 @@ provides_tools:
   - eeg_list_sessions
 provides_mcp_servers:
   - name: sonus
-    description: "Suno API MCP server — stdio or SSE transport. Exposes 10+ tools for Suno generation, polling, downloading, batch albums, voice cloning, and more."
+    description: "Suno API MCP server — stdio or SSE transport. Exposes 16+ tools for Suno generation, polling, downloading, batch albums, voice cloning, stem separation, section replacement, style boost, WAV conversion, music video, sound effects, and more."
     entrypoint: "hermes_sonus.mcp.server:main"
     env:
       - SUNO_API_KEY

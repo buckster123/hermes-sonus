@@ -15,7 +15,7 @@ Install: pip install hermes-music
 Config:  SUNO_API_KEY in ~/.hermes/.env
 """
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 import json
 import logging
