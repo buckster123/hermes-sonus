@@ -6,6 +6,8 @@ Track-aware: each generation produces multiple tracks with independent curation.
 """
 
 import logging
+import json
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .tasks import MusicTaskManager, MusicTask, TrackInfo, TaskStatus
@@ -134,6 +136,61 @@ def search_songs(
         return {"error": str(e)}
 
 
+def _remember_favorite_to_cerebro(task: MusicTask, track: Optional[int] = None) -> None:
+    """Best-effort Cerebro memory store for a favorited track.
+
+    If Cerebro REST API is reachable, POSTs the memory directly.
+    Otherwise appends to a local JSONL log for later ingestion.
+    """
+    try:
+        import urllib.request
+        import urllib.error
+
+        memory_content = (
+            f"Favorite Suno track: '{task.title}' (model={task.model}, "
+            f"instrumental={task.is_instrumental}). Style: {task.style}. "
+            f"Prompt: {task.prompt[:200]}..."
+        )
+        payload = json.dumps({
+            "content": memory_content,
+            "memory_type": "affective",
+            "salience": 0.75,
+            "tags": ["suno:favorite", f"suno:style:{task.style[:30]}", "music"],
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            "http://localhost:8767/api/v1/memories",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            if resp.status == 200:
+                logger.info("Cerebro favorite memory stored for %s", task.task_id)
+                return
+    except Exception:
+        pass  # Cerebro not reachable — fall through to local log
+
+    # Fallback: local JSONL log
+    try:
+        log_path = Path.home() / ".hermes" / "sonus" / "cerebro-favorites.jsonl"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "task_id": task.task_id,
+            "title": task.title,
+            "style": task.style,
+            "model": task.model,
+            "is_instrumental": task.is_instrumental,
+            "prompt_preview": task.prompt[:200],
+            "track": track,
+            "timestamp": __import__("datetime").datetime.now().isoformat(),
+        }
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception as e:
+        logger.warning("Failed to write Cerebro favorite fallback log: %s", e)
+
+
 def toggle_favorite(
     manager: MusicTaskManager,
     task_id: str,
@@ -162,6 +219,8 @@ def toggle_favorite(
             else:
                 ti.favorite = not ti.favorite
             manager._save_tasks()
+            if ti.favorite:
+                _remember_favorite_to_cerebro(task, track)
             return {
                 "success": True,
                 "task_id": task_id,
@@ -177,6 +236,8 @@ def toggle_favorite(
             else:
                 task.favorite = not task.favorite
             manager._save_tasks()
+            if task.favorite:
+                _remember_favorite_to_cerebro(task)
             return {
                 "success": True,
                 "task_id": task_id,
