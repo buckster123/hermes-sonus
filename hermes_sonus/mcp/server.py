@@ -816,7 +816,7 @@ def list_endpoints() -> dict:
             "GET /api/v1/wav/record-info": "Poll WAV conversion status",
             "POST /api/v1/vocal-removal/generate": "Stem separation (vocals from instruments)",
             "GET /api/v1/vocal-removal/record-info": "Poll stem separation status",
-            "POST /api/v1/midi/generate": "Generate MIDI from audio",
+            "POST /api/v1/midi/generate": "Convert audio to MIDI (audio-to-MIDI extraction — NOT MIDI creation. Use local midi_create tool to build MIDI, then upload + compose via upload-cover)",
             "GET /api/v1/midi/record-info": "Poll MIDI generation status",
         },
         "music_video": {

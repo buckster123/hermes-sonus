@@ -58,6 +58,7 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 SUNO_API_BASE = "https://api.sunoapi.org/api/v1"
+SUNO_FILE_API_BASE = "https://api.sunoapi.org"
 
 
 def _get_api_key() -> str:
@@ -229,7 +230,7 @@ def upload_audio(file_path: str) -> Dict[str, Any]:
     with open(file_path, "rb") as f:
         response = _api_call(
             "POST",
-            f"{SUNO_API_BASE}/upload-audio",
+            f"{SUNO_FILE_API_BASE}/api/file-stream-upload",
             headers=headers,
             files={"file": (Path(file_path).name, f, "audio/mpeg")},
             timeout=60,
@@ -272,7 +273,7 @@ def submit_upload_cover(
     if prompt:
         payload["prompt"] = prompt
 
-    response = _api_call("POST", f"{SUNO_API_BASE}/upload-cover", headers=_headers(), json=payload)
+    response = _api_call("POST", f"{SUNO_API_BASE}/generate/upload-cover", headers=_headers(), json=payload)
     if response.status_code != 200:
         return {"success": False, "error": f"Upload-cover HTTP {response.status_code}: {response.text[:200]}"}
     result = response.json()
@@ -309,7 +310,7 @@ def submit_extend(
     if title:
         payload["title"] = title
 
-    response = _api_call("POST", f"{SUNO_API_BASE}/extend", headers=_headers(), json=payload)
+    response = _api_call("POST", f"{SUNO_API_BASE}/generate/extend", headers=_headers(), json=payload)
     response.raise_for_status()
     result = response.json()
     if result.get("code") != 200:
@@ -323,7 +324,7 @@ def submit_lyrics(prompt: str) -> str:
         "prompt": prompt,
         "callBackUrl": "https://localhost/callback",
     }
-    response = _api_call("POST", f"{SUNO_API_BASE}/generate-lyrics", headers=_headers(), json=payload)
+    response = _api_call("POST", f"{SUNO_API_BASE}/lyrics", headers=_headers(), json=payload)
     response.raise_for_status()
     result = response.json()
     if result.get("code") != 200:
@@ -334,7 +335,7 @@ def submit_lyrics(prompt: str) -> str:
 def clone_voice_validate() -> str:
     """Start voice cloning workflow. Returns task_id."""
     payload = {"callBackUrl": "https://localhost/callback"}
-    response = _api_call("POST", f"{SUNO_API_BASE}/suno-voice-validate", headers=_headers(), json=payload)
+    response = _api_call("POST", f"{SUNO_API_BASE}/voice/validate", headers=_headers(), json=payload)
     response.raise_for_status()
     result = response.json()
     if result.get("code") != 200:
@@ -349,7 +350,7 @@ def clone_voice_create(audio_url: str, task_id: str) -> str:
         "taskId": task_id,
         "callBackUrl": "https://localhost/callback",
     }
-    response = _api_call("POST", f"{SUNO_API_BASE}/suno-voice-generate", headers=_headers(), json=payload)
+    response = _api_call("POST", f"{SUNO_API_BASE}/voice/generate", headers=_headers(), json=payload)
     response.raise_for_status()
     result = response.json()
     if result.get("code") != 200:
@@ -400,7 +401,7 @@ def separate_stems(task_id: str, track_index: int = 0) -> str:
         "trackIndex": track_index,
         "callBackUrl": "https://localhost/callback",
     }
-    response = _api_call("POST", f"{SUNO_API_BASE}/separate-vocals", headers=_headers(), json=payload)
+    response = _api_call("POST", f"{SUNO_API_BASE}/vocal-removal/generate", headers=_headers(), json=payload)
     response.raise_for_status()
     result = response.json()
     if result.get("code") != 200:
@@ -416,7 +417,7 @@ def replace_section(task_id: str, section_type: str, new_lyrics: str) -> str:
         "newLyrics": new_lyrics,
         "callBackUrl": "https://localhost/callback",
     }
-    response = _api_call("POST", f"{SUNO_API_BASE}/replace-section", headers=_headers(), json=payload)
+    response = _api_call("POST", f"{SUNO_API_BASE}/generate/replace-section", headers=_headers(), json=payload)
     response.raise_for_status()
     result = response.json()
     if result.get("code") != 200:
@@ -431,7 +432,7 @@ def boost_style(task_id: str, target_style: str) -> str:
         "targetStyle": target_style,
         "callBackUrl": "https://localhost/callback",
     }
-    response = _api_call("POST", f"{SUNO_API_BASE}/boost-style", headers=_headers(), json=payload)
+    response = _api_call("POST", f"{SUNO_API_BASE}/style/generate", headers=_headers(), json=payload)
     response.raise_for_status()
     result = response.json()
     if result.get("code") != 200:
@@ -445,7 +446,7 @@ def convert_to_wav(task_id: str) -> str:
         "taskId": task_id,
         "callBackUrl": "https://localhost/callback",
     }
-    response = _api_call("POST", f"{SUNO_API_BASE}/convert-to-wav", headers=_headers(), json=payload)
+    response = _api_call("POST", f"{SUNO_API_BASE}/wav/generate", headers=_headers(), json=payload)
     response.raise_for_status()
     result = response.json()
     if result.get("code") != 200:
@@ -459,7 +460,7 @@ def create_music_video(task_id: str) -> str:
         "taskId": task_id,
         "callBackUrl": "https://localhost/callback",
     }
-    response = _api_call("POST", f"{SUNO_API_BASE}/create-music-video", headers=_headers(), json=payload)
+    response = _api_call("POST", f"{SUNO_API_BASE}/mp4/generate", headers=_headers(), json=payload)
     response.raise_for_status()
     result = response.json()
     if result.get("code") != 200:
@@ -475,7 +476,7 @@ def generate_sounds(prompt: str, duration: int = 5, model: str = "V5") -> str:
         "model": model,
         "callBackUrl": "https://localhost/callback",
     }
-    response = _api_call("POST", f"{SUNO_API_BASE}/generate-sounds", headers=_headers(), json=payload)
+    response = _api_call("POST", f"{SUNO_API_BASE}/generate/sounds", headers=_headers(), json=payload)
     response.raise_for_status()
     result = response.json()
     if result.get("code") != 200:
