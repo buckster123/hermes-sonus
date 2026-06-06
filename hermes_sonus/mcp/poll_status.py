@@ -33,7 +33,7 @@ DEFAULT_BASE_URL = "https://api.sunoapi.org"
 DETAILS_PATH = "/api/v1/generate/record-info"
 
 # Terminal states (stop polling once we hit any of these)
-TERMINAL_STATES = {"complete", "error", "failed", "cancelled", "expired"}
+TERMINAL_STATES = {"complete", "success", "first_success", "text_success", "error", "failed", "cancelled", "expired"}
 
 # Initial poll interval and cap for exponential backoff
 INITIAL_POLL_INTERVAL = 5.0   # seconds
@@ -125,11 +125,12 @@ def extract_audio_urls(response: dict) -> list[dict]:
         if not isinstance(t, dict):
             continue
         audio_url = (
-            t.get("audioUrl")
+            t.get("sourceAudioUrl")
+            or t.get("audioUrl")
             or t.get("audio_url")
+            or t.get("sourceStreamAudioUrl")
             or t.get("streamAudioUrl")
             or t.get("stream_audio_url")
-            or t.get("sourceAudioUrl")
         )
         if audio_url:
             result.append(

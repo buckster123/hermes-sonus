@@ -729,11 +729,13 @@ def convert_to_wav(task_id: str) -> dict:
 
 
 @mcp.tool()
-def create_music_video(task_id: str) -> dict:
+def create_music_video(task_id: str, audio_id: str = "") -> dict:
     """Generate a music video from a completed track.
 
     Args:
         task_id: The task_id of the track to visualize.
+        audio_id: The audio_id of the specific track variant (each task generates 2).
+                  Required by the API — check check_status output for the id field.
 
     Returns:
         Dict with new task_id for the video generation job.
@@ -741,8 +743,11 @@ def create_music_video(task_id: str) -> dict:
     err = _require_api_key()
     if err:
         return {"error": err}
+    if not audio_id:
+        return {"error": "audio_id required. Get it from check_status — look for the 'id' field on each track."}
     response = _post("/api/v1/mp4/generate", {
         "taskId": task_id,
+        "audioId": audio_id,
         "callBackUrl": SUNO_CALLBACK_URL or "https://localhost/callback",
     })
     new_task_id = response.get("data", {}).get("taskId") if isinstance(response.get("data"), dict) else None
